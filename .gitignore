@@ -1,0 +1,7 @@
+node_modules/
+dist/
+uploads/
+*.db
+.env
+.DS_Store
+*logs 

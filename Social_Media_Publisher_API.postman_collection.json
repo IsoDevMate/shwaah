@@ -1,0 +1,309 @@
+{
+  "info": {
+    "name": "Social Media Publisher API",
+    "description": "Multi-platform social media publisher supporting TikTok, Instagram, LinkedIn, YouTube, and Facebook",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"name\": \"John Doe\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('auth_token', response.token);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Social Accounts",
+      "item": [
+        {
+          "name": "Get Connected Accounts",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/social/accounts",
+              "host": ["{{base_url}}"],
+              "path": ["api", "social", "accounts"]
+            }
+          }
+        },
+        {
+          "name": "Get OAuth URL - Instagram",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/social/connect/instagram",
+              "host": ["{{base_url}}"],
+              "path": ["api", "social", "connect", "instagram"]
+            }
+          }
+        },
+        {
+          "name": "Get OAuth URL - Facebook",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/social/connect/facebook",
+              "host": ["{{base_url}}"],
+              "path": ["api", "social", "connect", "facebook"]
+            }
+          }
+        },
+        {
+          "name": "Get OAuth URL - LinkedIn",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/social/connect/linkedin",
+              "host": ["{{base_url}}"],
+              "path": ["api", "social", "connect", "linkedin"]
+            }
+          }
+        },
+        {
+          "name": "Get OAuth URL - YouTube",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/social/connect/youtube",
+              "host": ["{{base_url}}"],
+              "path": ["api", "social", "connect", "youtube"]
+            }
+          }
+        },
+        {
+          "name": "Get OAuth URL - TikTok",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/social/connect/tiktok",
+              "host": ["{{base_url}}"],
+              "path": ["api", "social", "connect", "tiktok"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Posts",
+      "item": [
+        {
+          "name": "Create Post",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Check out this amazing post!\",\n  \"platforms\": [\"instagram\", \"facebook\", \"linkedin\"],\n  \"scheduledAt\": \"2026-01-26T10:00:00Z\",\n  \"mediaUrls\": [\"https://example.com/image.jpg\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/posts/create",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts", "create"]
+            }
+          }
+        },
+        {
+          "name": "Publish Post",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/posts/publish/:postId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts", "publish", ":postId"],
+              "variable": [
+                {
+                  "key": "postId",
+                  "value": "post_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Scheduled Posts",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/posts/scheduled",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts", "scheduled"]
+            }
+          }
+        },
+        {
+          "name": "Get Calendar View",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/posts/calendar?month=2026-01",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts", "calendar"],
+              "query": [
+                {
+                  "key": "month",
+                  "value": "2026-01"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Campaigns",
+      "item": [
+        {
+          "name": "Create Campaign",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Summer Campaign 2026\",\n  \"description\": \"Promoting summer products\",\n  \"startDate\": \"2026-06-01T00:00:00Z\",\n  \"endDate\": \"2026-08-31T23:59:59Z\",\n  \"platforms\": [\"instagram\", \"facebook\", \"tiktok\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/campaigns/create",
+              "host": ["{{base_url}}"],
+              "path": ["api", "campaigns", "create"]
+            }
+          }
+        },
+        {
+          "name": "Get My Campaigns",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/campaigns/my-campaigns",
+              "host": ["{{base_url}}"],
+              "path": ["api", "campaigns", "my-campaigns"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "item": [
+        {
+          "name": "Get Dashboard Analytics",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/analytics/dashboard?period=30d",
+              "host": ["{{base_url}}"],
+              "path": ["api", "analytics", "dashboard"],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "30d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Campaign Analytics",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/analytics/campaign/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "analytics", "campaign", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "campaign_id_here"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
