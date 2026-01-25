@@ -52,7 +52,8 @@ const publishToInstagram = async (accessToken: string, content: string, mediaUrl
   });
   
   // Publish media
-  const publishResponse = await axios.post(`${config.baseUrl}/${mediaResponse.data.id}/publish`, {
+  const publishResponse = await axios.post(`${config.baseUrl}/me/media_publish`, {
+    creation_id: mediaResponse.data.id,
     access_token: accessToken
   });
   

@@ -79,7 +79,7 @@ async function startServer() {
     
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`🏥 Health check: http://localhost:${PORT}/api/health`);
+      console.log(`🏥 Health check: https://shwaah.onrender.com/api/health`);
       console.log(`🗄️  Database: Turso (libsql)`);
       console.log('\n🚀 Social Media Publisher API');
       console.log('\n📋 Available endpoints:');
