@@ -104,19 +104,23 @@ router.get('/callback/:platform', asyncHandler('Social', 'OAuthCallback')(async 
     // Remove verbose logging
     
     // Save to database
-    console.log('Saving tokens:', {
-      access_token: !!tokens.access_token,
-      refresh_token: !!tokens.refresh_token,
-      refresh_token_value: tokens.refresh_token
+    console.log('About to encrypt refresh token:', {
+      exists: !!tokens.refresh_token,
+      type: typeof tokens.refresh_token,
+      value: tokens.refresh_token?.substring(0, 20)
     });
-    
+
+    const encryptedRefreshToken = tokens.refresh_token && typeof tokens.refresh_token === 'string' 
+      ? encrypt(tokens.refresh_token) 
+      : null;
+
     await SocialAccount.upsert({
       userId: parseInt(userId as string),
       platform: platform as any,
       platformUserId: userInfo.id,
       platformUsername: userInfo.username || userInfo.name,
       accessToken: encrypt(tokens.access_token),
-      refreshToken: tokens.refresh_token ? encrypt(tokens.refresh_token) : null,
+      refreshToken: encryptedRefreshToken,
       expiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : undefined,
       isActive: true
     });
