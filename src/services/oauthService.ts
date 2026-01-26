@@ -55,6 +55,7 @@ export async function exchangeCodeForTokens(platform: string, code: string): Pro
   };
 
   try {
+    console.log(`Starting token exchange for ${platform} with code:`, code.substring(0, 20) + '...');
     let response;
     
     if (platform === 'instagram') {
@@ -62,6 +63,7 @@ export async function exchangeCodeForTokens(platform: string, code: string): Pro
         params: tokenData[platform]
       });
     } else if (platform === 'tiktok') {
+      console.log('TikTok token request data:', tokenData[platform]);
       response = await axios.post(tokenUrls[platform], 
         new URLSearchParams(tokenData[platform]).toString(),
         {
@@ -94,7 +96,11 @@ export async function exchangeCodeForTokens(platform: string, code: string): Pro
     
     return response.data;
   } catch (error: any) {
-    console.error(`Token exchange failed for ${platform}:`, error);
+    console.error(`Token exchange failed for ${platform}:`, error.response?.data || error.message);
+    console.error('Request details:', {
+      url: tokenUrls[platform],
+      data: platform === 'tiktok' ? tokenData[platform] : 'hidden'
+    });
     console.error('Stack:', error.stack);
     throw error;
   }
@@ -114,10 +120,8 @@ export async function getPlatformUserInfo(platform: string, accessToken: string,
     let response;
     
     if (platform === 'tiktok') {
-      // TikTok v2 API requires fields as query params and open_id
-      if (!openId) {
-        throw new Error('TikTok requires open_id to fetch user info');
-      }
+      // TikTok v2 API requires fields as query params
+      console.log('TikTok openId received:', openId);
       
       response = await axios.get(userInfoUrls[platform], {
         params: {
@@ -129,14 +133,14 @@ export async function getPlatformUserInfo(platform: string, accessToken: string,
         }
       });
       
+      console.log('TikTok user info response:', response.data);
+      
       // TikTok returns data in nested structure
-      const userData = response.data.data?.user || response.data.user;
-      if (!userData) {
-        throw new Error('Invalid TikTok user data response');
-      }
+      const userData = response.data.data?.user || response.data.user || response.data;
+      console.log('TikTok extracted user data:', userData);
       
       return { 
-        id: userData.open_id || openId,
+        id: userData.open_id || openId || 'unknown',
         name: userData.display_name || 'TikTok User',
         username: userData.display_name || 'TikTok User'
       };
