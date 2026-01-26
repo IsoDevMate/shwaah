@@ -14,7 +14,14 @@ const PLATFORM_SCOPES: Record<string, string> = {
   facebook: 'pages_manage_posts,pages_read_engagement,publish_to_groups',
   linkedin: 'openid,email,profile,w_member_social',
   youtube: 'https://www.googleapis.com/auth/youtube.upload',
-  tiktok: 'user.info.basic,video.list,video.upload'
+  tiktok: [
+    'user.info.basic',
+    'video.publish',
+    'video.upload',
+    'user.info.profile',
+    'user.info.stats',
+    'video.list'
+  ].join(',')
 };
 
 const getAuthUrl = (platform: string, userId: number): string => {

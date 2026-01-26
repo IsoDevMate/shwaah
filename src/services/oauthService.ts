@@ -102,17 +102,15 @@ export async function getPlatformUserInfo(platform: string, accessToken: string)
     facebook: 'https://graph.facebook.com/me?fields=id,name',
     linkedin: 'https://api.linkedin.com/v2/people/~?projection=(id,localizedFirstName,localizedLastName)',
     youtube: 'https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true',
-    tiktok: 'https://open.tiktokapis.com/v2/user/info/'
+    tiktok: 'https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name'
   };
 
   try {
     let response;
     
     if (platform === 'tiktok') {
-      // TikTok v2 API requires POST with fields in body
-      response = await axios.post(userInfoUrls[platform], {
-        fields: ['open_id', 'union_id', 'avatar_url', 'display_name']
-      }, {
+      // TikTok v2 API uses GET with query parameters
+      response = await axios.get(userInfoUrls[platform], {
         headers: { 
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
