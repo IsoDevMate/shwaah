@@ -14,7 +14,7 @@ export async function exchangeCodeForTokens(platform: string, code: string): Pro
     facebook: 'https://graph.facebook.com/v18.0/oauth/access_token',
     linkedin: 'https://www.linkedin.com/oauth/v2/accessToken',
     youtube: 'https://oauth2.googleapis.com/token',
-    tiktok: 'https://open-api.tiktok.com/oauth/access_token/'
+    tiktok: 'https://open.tiktokapis.com/v2/oauth/token/'
   };
 
   const tokenData: Record<string, any> = {
@@ -55,22 +55,37 @@ export async function exchangeCodeForTokens(platform: string, code: string): Pro
   };
 
   try {
-    // Remove verbose logging
-    
     let response;
+    
     if (platform === 'instagram') {
-      // Instagram uses GET request with params (Facebook Graph API)
       response = await axios.get(tokenUrls[platform], {
         params: tokenData[platform]
       });
+    } else if (platform === 'tiktok') {
+      response = await axios.post(tokenUrls[platform], 
+        new URLSearchParams(tokenData[platform]).toString(),
+        {
+          headers: { 
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Cache-Control': 'no-cache'
+          }
+        }
+      );
     } else {
-      // Other platforms use POST
       response = await axios.post(tokenUrls[platform], tokenData[platform], {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       });
     }
     
-    // Remove verbose logging
+    if (platform === 'tiktok') {
+      return {
+        access_token: response.data.access_token,
+        refresh_token: response.data.refresh_token,
+        expires_in: response.data.expires_in,
+        open_id: response.data.open_id,
+        scope: response.data.scope
+      };
+    }
     
     return response.data;
   } catch (error: any) {
@@ -87,7 +102,7 @@ export async function getPlatformUserInfo(platform: string, accessToken: string)
     facebook: 'https://graph.facebook.com/me?fields=id,name',
     linkedin: 'https://api.linkedin.com/v2/people/~?projection=(id,localizedFirstName,localizedLastName)',
     youtube: 'https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true',
-    tiktok: 'https://open-api.tiktok.com/user/info/?fields=open_id,union_id,avatar_url,display_name'
+    tiktok: 'https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name'
   };
 
   try {
@@ -115,7 +130,8 @@ export async function getPlatformUserInfo(platform: string, accessToken: string)
       case 'tiktok':
         return { 
           id: response.data.data.user.open_id, 
-          name: response.data.data.user.display_name 
+          name: response.data.data.user.display_name,
+          username: response.data.data.user.display_name
         };
       default:
         throw new Error(`Unsupported platform: ${platform}`);

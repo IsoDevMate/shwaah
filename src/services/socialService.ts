@@ -31,9 +31,9 @@ const PLATFORM_CONFIGS: Record<string, PlatformConfig> = {
     userEndpoint: '/youtube/v3/channels'
   },
   tiktok: {
-    baseUrl: 'https://open-api.tiktok.com',
-    postEndpoint: '/share/video/upload/',
-    userEndpoint: '/user/info/'
+    baseUrl: 'https://open.tiktokapis.com',
+    postEndpoint: '/v2/post/publish/video/init/',
+    userEndpoint: '/v2/user/info/'
   }
 };
 
@@ -157,20 +157,34 @@ const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: 
   
   const config = PLATFORM_CONFIGS.tiktok;
   
-  const postData = {
-    video_url: mediaUrl,
-    text: content,
-    privacy_level: 'PUBLIC_TO_EVERYONE'
-  };
-  
-  const response = await axios.post(`${config.baseUrl}${config.postEndpoint}`, postData, {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
+  // TikTok v2 API requires a multi-step process
+  const initResponse = await axios.post(
+    `${config.baseUrl}${config.postEndpoint}`,
+    {
+      post_info: {
+        title: content.substring(0, 150),
+        privacy_level: 'PUBLIC_TO_EVERYONE',
+        disable_duet: false,
+        disable_comment: false,
+        disable_stitch: false,
+        video_cover_timestamp_ms: 1000
+      },
+      source_info: {
+        source: 'FILE_UPLOAD',
+        video_size: 0,
+        chunk_size: 10000000,
+        total_chunk_count: 1
+      }
+    },
+    {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
     }
-  });
+  );
   
-  return response.data;
+  return initResponse.data;
 };
 
 export const publishToSocial = async (
