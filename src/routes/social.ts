@@ -16,11 +16,10 @@ const PLATFORM_SCOPES: Record<string, string> = {
   youtube: 'https://www.googleapis.com/auth/youtube.upload',
   tiktok: [
     'user.info.basic',
-    'video.publish',
-    'video.upload',
-    'user.info.profile',
     'user.info.stats',
-    'video.list'
+    'video.list',
+    'video.publish',
+    'video.upload'
   ].join(',')
 };
 
