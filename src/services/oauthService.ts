@@ -80,10 +80,17 @@ export async function exchangeCodeForTokens(platform: string, code: string): Pro
     }
     
     if (platform === 'tiktok') {
-      // TikTok v2 returns data in a nested structure
-      console.log('TikTok raw response:', response.data);
-      const data = response.data.data || response.data;
-      console.log('TikTok extracted data:', data);
+      console.log(`[${platform}] Token response:`, JSON.stringify(response.data, null, 2));
+      
+      // TikTok v2 returns data directly (not nested)
+      const data = response.data;
+      
+      if (!data.access_token) {
+        throw new Error(`No access token in TikTok response: ${JSON.stringify(response.data)}`);
+      }
+      
+      console.log(`[${platform}] Extracted open_id:`, data.open_id);
+      
       return {
         access_token: data.access_token,
         refresh_token: data.refresh_token,
@@ -109,40 +116,54 @@ export async function exchangeCodeForTokens(platform: string, code: string): Pro
 // Get user info from platform
 export async function getPlatformUserInfo(platform: string, accessToken: string, openId?: string): Promise<PlatformUserInfo> {
   const userInfoUrls: Record<string, string> = {
-    instagram: 'https://graph.instagram.com/me?fields=id,username', // Updated to use Graph API
+    instagram: 'https://graph.instagram.com/me?fields=id,username',
     facebook: 'https://graph.facebook.com/me?fields=id,name',
     linkedin: 'https://api.linkedin.com/v2/people/~?projection=(id,localizedFirstName,localizedLastName)',
     youtube: 'https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true',
-    tiktok: 'https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name'
+    tiktok: 'https://open.tiktokapis.com/v2/user/info/' // No query params in base URL
   };
 
   try {
     let response;
     
     if (platform === 'tiktok') {
-      // TikTok v2 API requires fields as query params
-      console.log('TikTok openId received:', openId);
+      // TikTok v2 API - use the open_id directly without additional API call
+      if (!openId) {
+        throw new Error('TikTok requires open_id from token response');
+      }
       
-      response = await axios.get(userInfoUrls[platform], {
-        params: {
-          fields: 'open_id,union_id,avatar_url,display_name'
-        },
-        headers: { 
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
+      console.log(`[${platform}] Using open_id as user identifier:`, openId);
+      
+      // Try to fetch additional user info, but fallback to open_id if it fails
+      try {
+        response = await axios.get(userInfoUrls[platform], {
+          params: {
+            fields: 'open_id,union_id,avatar_url,display_name'
+          },
+          headers: { 
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        const userData = response.data.data?.user;
+        if (userData) {
+          return { 
+            id: userData.open_id || openId,
+            name: userData.display_name || 'TikTok User',
+            username: userData.display_name || 'TikTok User'
+          };
         }
-      });
+      } catch (userInfoError: any) {
+        console.warn(`[${platform}] Could not fetch user info, using open_id only:`, 
+          userInfoError.response?.data || userInfoError.message);
+      }
       
-      console.log('TikTok user info response:', response.data);
-      
-      // TikTok returns data in nested structure
-      const userData = response.data.data?.user || response.data.user || response.data;
-      console.log('TikTok extracted user data:', userData);
-      
+      // Fallback: use open_id as the identifier
       return { 
-        id: userData.open_id || openId || 'unknown',
-        name: userData.display_name || 'TikTok User',
-        username: userData.display_name || 'TikTok User'
+        id: openId,
+        name: 'TikTok User',
+        username: 'TikTok User'
       };
     } else {
       response = await axios.get(userInfoUrls[platform], {
