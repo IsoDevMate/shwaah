@@ -22,6 +22,10 @@ export interface OAuthTokens {
   access_token: string;
   refresh_token?: string;
   expires_in?: number;
+  // TikTok specific fields
+  open_id?: string;
+  scope?: string;
+  token_type?: string;
 }
 
 export interface PlatformUserInfo {

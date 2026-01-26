@@ -78,12 +78,15 @@ export async function exchangeCodeForTokens(platform: string, code: string): Pro
     }
     
     if (platform === 'tiktok') {
+      // TikTok v2 returns data in a nested structure
+      const data = response.data.data || response.data;
       return {
-        access_token: response.data.access_token,
-        refresh_token: response.data.refresh_token,
-        expires_in: response.data.expires_in,
-        open_id: response.data.open_id,
-        scope: response.data.scope
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        expires_in: data.expires_in,
+        open_id: data.open_id,
+        scope: data.scope,
+        token_type: data.token_type
       };
     }
     
@@ -96,7 +99,7 @@ export async function exchangeCodeForTokens(platform: string, code: string): Pro
 }
 
 // Get user info from platform
-export async function getPlatformUserInfo(platform: string, accessToken: string): Promise<PlatformUserInfo> {
+export async function getPlatformUserInfo(platform: string, accessToken: string, openId?: string): Promise<PlatformUserInfo> {
   const userInfoUrls: Record<string, string> = {
     instagram: 'https://graph.instagram.com/me?fields=id,username', // Updated to use Graph API
     facebook: 'https://graph.facebook.com/me?fields=id,name',
@@ -109,13 +112,32 @@ export async function getPlatformUserInfo(platform: string, accessToken: string)
     let response;
     
     if (platform === 'tiktok') {
-      // TikTok v2 API uses GET with query parameters
+      // TikTok v2 API requires fields as query params and open_id
+      if (!openId) {
+        throw new Error('TikTok requires open_id to fetch user info');
+      }
+      
       response = await axios.get(userInfoUrls[platform], {
+        params: {
+          fields: 'open_id,union_id,avatar_url,display_name'
+        },
         headers: { 
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
         }
       });
+      
+      // TikTok returns data in nested structure
+      const userData = response.data.data?.user || response.data.user;
+      if (!userData) {
+        throw new Error('Invalid TikTok user data response');
+      }
+      
+      return { 
+        id: userData.open_id || openId,
+        name: userData.display_name || 'TikTok User',
+        username: userData.display_name || 'TikTok User'
+      };
     } else {
       response = await axios.get(userInfoUrls[platform], {
         headers: { Authorization: `Bearer ${accessToken}` }
@@ -139,11 +161,8 @@ export async function getPlatformUserInfo(platform: string, accessToken: string)
         const channel = response.data.items[0];
         return { id: channel.id, name: channel.snippet.title };
       case 'tiktok':
-        return { 
-          id: response.data.data.user.open_id, 
-          name: response.data.data.user.display_name,
-          username: response.data.data.user.display_name
-        };
+        // Already handled above in the TikTok-specific block
+        break;
       default:
         throw new Error(`Unsupported platform: ${platform}`);
     }

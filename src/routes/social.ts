@@ -92,7 +92,11 @@ router.get('/callback/:platform', asyncHandler('Social', 'OAuthCallback')(async 
     
     // Remove verbose logging
     // Get user info from platform
-    const userInfo = await getPlatformUserInfo(platform, tokens.access_token);
+    const userInfo = await getPlatformUserInfo(
+      platform, 
+      tokens.access_token,
+      platform === 'tiktok' ? (tokens as any).open_id : undefined
+    );
     // Remove verbose logging
     
     // Save to database
