@@ -26,18 +26,18 @@ async function publishScheduledPost(post: any) {
       try {
         const refreshedAccount = await refreshTokenIfNeeded(account);
         const result = await publishToSocial(
-          account.platform, 
+          account.platform as string, 
           refreshedAccount.accessToken, 
           post.content, 
           post.mediaUrls?.[0] // Use first media URL
         );
         
-        publishResults[account.platform] = { success: true, data: result };
+        publishResults[account.platform as string] = { success: true, data: result };
         
         // Create analytics record
         await Analytics.create({
           postId: post.id,
-          platform: account.platform,
+          platform: account.platform as string,
           views: 0,
           likes: 0,
           shares: 0,
@@ -46,7 +46,7 @@ async function publishScheduledPost(post: any) {
         });
         
       } catch (error) {
-        publishResults[account.platform] = { 
+        publishResults[account.platform as string] = { 
           success: false, 
           error: (error as Error).message 
         };
@@ -81,11 +81,11 @@ async function updateAnalytics() {
   const recentAnalytics = await Analytics.findRecent(1); // Last 24 hours
   
   for (const analytics of recentAnalytics) {
-    await Analytics.update(analytics.id, {
-      views: analytics.views + Math.floor(Math.random() * 100),
-      likes: analytics.likes + Math.floor(Math.random() * 20),
-      shares: analytics.shares + Math.floor(Math.random() * 5),
-      comments: analytics.comments + Math.floor(Math.random() * 10),
+    await Analytics.update(analytics.id as number, {
+      views: Number(analytics.views || 0) + Math.floor(Math.random() * 100),
+      likes: Number(analytics.likes || 0) + Math.floor(Math.random() * 20),
+      shares: Number(analytics.shares || 0) + Math.floor(Math.random() * 5),
+      comments: Number(analytics.comments || 0) + Math.floor(Math.random() * 10),
       engagementRate: Math.random() * 10
     });
   }

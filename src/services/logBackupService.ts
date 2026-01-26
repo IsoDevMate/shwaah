@@ -80,7 +80,7 @@ async function backupLogs(): Promise<void> {
     
     console.log('✅ Log backup completed');
   } catch (error) {
-    console.error('❌ Log backup failed:', error.message);
+    console.error('❌ Log backup failed:', (error as Error).message);
   }
 }
 

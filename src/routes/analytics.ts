@@ -1,5 +1,6 @@
 import express from 'express';
-import { Analytics, Post, Campaign, Database } from '../models/tursoModels';
+import { Analytics, Post, Campaign } from '../models/tursoModels';
+import { Database } from '../models';
 import { authenticateUser } from '../middleware/auth';
 import { AuthRequest } from '../types';
 

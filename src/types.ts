@@ -1,10 +1,50 @@
-export interface User {
+import { Request } from 'express';
+
+// Minimal User interface for authentication context
+export interface AuthUser {
   id: number;
   email: string;
-  role: string;
-  created_at: string;
+  name: string;
+  password?: string; // Password might be present but often omitted for security in context
 }
 
+export interface AuthRequest extends Request {
+  user?: AuthUser;
+}
+
+export interface PublishResult {
+  success: boolean;
+  data?: any;
+  error?: string;
+}
+
+export interface OAuthTokens {
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+}
+
+export interface PlatformUserInfo {
+  id: string;
+  username?: string;
+  name?: string;
+}
+
+export interface PostDB {
+  id: number;
+  userId: number;
+  content: string;
+  mediaUrls: string[];
+  platforms: string[];
+  status: string;
+  publishResults: any; // Can be more specific if needed
+  scheduledAt?: string; // or Date, depending on how it's handled after retrieval
+  campaignId?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// These are original interfaces from the file, keeping them
 export interface SocialAccount {
   id: number;
   user_id: number;
@@ -35,3 +75,5 @@ export interface Campaign {
   status: 'active' | 'paused' | 'completed';
   created_at: string;
 }
+
+

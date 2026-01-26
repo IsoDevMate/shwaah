@@ -1,4 +1,16 @@
 import { Database } from '../models';
+import { AuthUser } from '../types';
+import { Value } from '@libsql/client'; // Import Value type
+
+// Helper to convert a database Row to an AuthUser
+function rowToAuthUser(row: Record<string, Value>): AuthUser {
+  return {
+    id: Number(row.id),
+    email: String(row.email),
+    name: String(row.name),
+    password: String(row.password),
+  };
+}
 
 export class User {
   static async create(data: { email: string; password: string; name: string }) {
@@ -6,17 +18,17 @@ export class User {
       'INSERT INTO Users (email, password, name) VALUES (?, ?, ?)',
       [data.email, data.password, data.name]
     );
-    return { id: result.lastInsertRowid, ...data };
+    return { id: Number(result.lastInsertRowid), ...data };
   }
 
-  static async findByEmail(email: string) {
+  static async findByEmail(email: string): Promise<AuthUser | null> {
     const result = await Database.execute('SELECT * FROM Users WHERE email = ?', [email]);
-    return result.rows[0] || null;
+    return result.rows[0] ? rowToAuthUser(result.rows[0]) : null;
   }
 
-  static async findById(id: number) {
+  static async findById(id: number): Promise<AuthUser | null> {
     const result = await Database.execute('SELECT * FROM Users WHERE id = ?', [id]);
-    return result.rows[0] || null;
+    return result.rows[0] ? rowToAuthUser(result.rows[0]) : null;
   }
 }
 
@@ -84,72 +96,83 @@ export class SocialAccount {
   }
 }
 
+// Helper to convert a database Row to a PostDB
+function rowToPostDB(row: Record<string, Value>): PostDB {
+  const mediaUrls = JSON.parse(String(row.mediaUrls || '[]'));
+  const platforms = JSON.parse(String(row.platforms));
+  const publishResults = row.publishResults ? JSON.parse(String(row.publishResults)) : null;
+
+  return {
+    id: Number(row.id),
+    userId: Number(row.userId),
+    content: String(row.content),
+    mediaUrls: mediaUrls, // Already parsed to string[]
+    platforms: platforms, // Already parsed to string[]
+    status: String(row.status),
+    publishResults: publishResults,
+    scheduledAt: row.scheduledAt ? String(row.scheduledAt) : undefined,
+    campaignId: row.campaignId ? Number(row.campaignId) : undefined,
+    createdAt: String(row.createdAt),
+    updatedAt: String(row.updatedAt),
+  };
+}
+
 export class Post {
-  static async create(data: any) {
+  static async create(data: any): Promise<PostDB> {
     const result = await Database.execute(
       'INSERT INTO Posts (userId, content, mediaUrls, platforms, status, scheduledAt, campaignId) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [data.userId, data.content, JSON.stringify(data.mediaUrls), JSON.stringify(data.platforms), data.status, data.scheduledAt, data.campaignId]
     );
-    return { id: result.lastInsertRowid, ...data };
+    const newId = Number(result.lastInsertRowid);
+    return { 
+      id: newId, 
+      userId: data.userId,
+      content: data.content,
+      mediaUrls: data.mediaUrls,
+      platforms: data.platforms,
+      status: data.status,
+      publishResults: null, // Initially no publish results
+      scheduledAt: data.scheduledAt,
+      campaignId: data.campaignId,
+      createdAt: new Date().toISOString(), // Placeholder, DB sets actual
+      updatedAt: new Date().toISOString() // Placeholder
+    };
   }
 
-  static async findById(id: number) {
+  static async findById(id: number): Promise<PostDB | null> {
     const result = await Database.execute('SELECT * FROM Posts WHERE id = ?', [id]);
-    const post = result.rows[0];
-    if (post) {
-      post.mediaUrls = JSON.parse(post.mediaUrls || '[]');
-      post.platforms = JSON.parse(post.platforms);
-      post.publishResults = post.publishResults ? JSON.parse(post.publishResults) : null;
-    }
-    return post || null;
+    return result.rows[0] ? rowToPostDB(result.rows[0]) : null;
   }
 
-  static async findByUser(userId: number) {
+  static async findByUser(userId: number): Promise<PostDB[]> {
     const result = await Database.execute(
       'SELECT * FROM Posts WHERE userId = ? ORDER BY createdAt DESC',
       [userId]
     );
-    return result.rows.map(post => ({
-      ...post,
-      mediaUrls: JSON.parse(post.mediaUrls || '[]'),
-      platforms: JSON.parse(post.platforms),
-      publishResults: post.publishResults ? JSON.parse(post.publishResults) : null
-    }));
+    return result.rows.map(rowToPostDB);
   }
 
-  static async findScheduled() {
+  static async findScheduled(): Promise<PostDB[]> {
     const result = await Database.execute(
       'SELECT * FROM Posts WHERE status = "scheduled" AND scheduledAt <= datetime("now")'
     );
-    return result.rows.map(post => ({
-      ...post,
-      mediaUrls: JSON.parse(post.mediaUrls || '[]'),
-      platforms: JSON.parse(post.platforms)
-    }));
+    return result.rows.map(rowToPostDB);
   }
 
-  static async findScheduledByUser(userId: number) {
+  static async findScheduledByUser(userId: number): Promise<PostDB[]> {
     const result = await Database.execute(
       'SELECT * FROM Posts WHERE userId = ? AND status = "scheduled" AND scheduledAt >= datetime("now") ORDER BY scheduledAt ASC',
       [userId]
     );
-    return result.rows.map(post => ({
-      ...post,
-      mediaUrls: JSON.parse(post.mediaUrls || '[]'),
-      platforms: JSON.parse(post.platforms)
-    }));
+    return result.rows.map(rowToPostDB);
   }
 
-  static async findByDateRange(userId: number, startDate: string, endDate: string) {
+  static async findByDateRange(userId: number, startDate: string, endDate: string): Promise<PostDB[]> {
     const result = await Database.execute(
       'SELECT * FROM Posts WHERE userId = ? AND scheduledAt BETWEEN ? AND ? ORDER BY scheduledAt ASC',
       [userId, startDate, endDate]
     );
-    return result.rows.map(post => ({
-      ...post,
-      mediaUrls: JSON.parse(post.mediaUrls || '[]'),
-      platforms: JSON.parse(post.platforms)
-    }));
+    return result.rows.map(rowToPostDB);
   }
 
   static async update(id: number, data: any) {
@@ -164,7 +187,7 @@ export class Post {
       'DELETE FROM Posts WHERE id = ? AND userId = ?',
       [id, userId]
     );
-    return result.changes > 0;
+    return result.rowsAffected > 0;
   }
 }
 
@@ -215,7 +238,7 @@ export class Campaign {
       'DELETE FROM Campaigns WHERE id = ? AND userId = ?',
       [id, userId]
     );
-    return result.changes > 0;
+    return result.rowsAffected > 0;
   }
 }
 

@@ -155,7 +155,7 @@ export class Database {
       console.log(`📁 Bucket: ${process.env.R2_BUCKET_NAME}`);
       
     } catch (error) {
-      console.error('❌ R2 connection failed:', error.message);
+      console.error('❌ R2 connection failed:', (error as Error).message);
       console.log('💡 Media uploads will not work until R2 is configured');
     }
   }

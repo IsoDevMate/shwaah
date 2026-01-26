@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { OAuthTokens, PlatformUserInfo } from '../types';
+import logger from '../utils/logger';
 
 // Exchange authorization code for access tokens
 export async function exchangeCodeForTokens(platform: string, code: string): Promise<OAuthTokens> {
@@ -7,8 +8,10 @@ export async function exchangeCodeForTokens(platform: string, code: string): Pro
   const clientSecret = process.env[`${platform.toUpperCase()}_CLIENT_SECRET`];
   const redirectUri = `${process.env.REDIRECT_URI}/${platform}`;
 
+  logger.info(`Token exchange attempt`, { platform, clientId: clientId?.substring(0, 8) + '...', redirectUri });
+
   const tokenUrls: Record<string, string> = {
-    instagram: 'https://api.instagram.com/oauth/access_token', // Same URL for new Instagram API
+    instagram: 'https://graph.facebook.com/v19.0/oauth/access_token', // Use Facebook Graph API for Instagram Business
     facebook: 'https://graph.facebook.com/v18.0/oauth/access_token',
     linkedin: 'https://www.linkedin.com/oauth/v2/accessToken',
     youtube: 'https://oauth2.googleapis.com/token',
@@ -52,11 +55,41 @@ export async function exchangeCodeForTokens(platform: string, code: string): Pro
     }
   };
 
-  const response = await axios.post(tokenUrls[platform], tokenData[platform], {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-  });
-
-  return response.data;
+  try {
+    logger.info(`Making token request to ${tokenUrls[platform]}`);
+    
+    let response;
+    if (platform === 'instagram') {
+      // Instagram uses GET request with params (Facebook Graph API)
+      response = await axios.get(tokenUrls[platform], {
+        params: tokenData[platform]
+      });
+    } else {
+      // Other platforms use POST
+      response = await axios.post(tokenUrls[platform], tokenData[platform], {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      });
+    }
+    
+    logger.info(`Token response received`, { 
+      platform, 
+      status: response.status,
+      hasAccessToken: !!response.data.access_token,
+      tokenType: response.data.token_type
+    });
+    
+    return response.data;
+  } catch (error: any) {
+    logger.error(`Token exchange failed for ${platform}`, {
+      error: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      url: tokenUrls[platform],
+      requestData: { ...tokenData[platform], client_secret: '[HIDDEN]' }
+    });
+    throw error;
+  }
 }
 
 // Get user info from platform
@@ -69,30 +102,78 @@ export async function getPlatformUserInfo(platform: string, accessToken: string)
     tiktok: 'https://open-api.tiktok.com/user/info/?fields=open_id,union_id,avatar_url,display_name'
   };
 
-  const response = await axios.get(userInfoUrls[platform], {
-    headers: { Authorization: `Bearer ${accessToken}` }
-  });
+  try {
+    logger.info(`Getting user info from ${platform}`, { url: userInfoUrls[platform] });
+    const response = await axios.get(userInfoUrls[platform], {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
 
-  // Transform response based on platform
-  switch (platform) {
-    case 'instagram':
-      return { id: response.data.id, username: response.data.username };
-    case 'facebook':
-      return { id: response.data.id, name: response.data.name };
-    case 'linkedin':
-      return { 
-        id: response.data.id, 
-        name: `${response.data.localizedFirstName} ${response.data.localizedLastName}` 
-      };
-    case 'youtube':
-      const channel = response.data.items[0];
-      return { id: channel.id, name: channel.snippet.title };
-    case 'tiktok':
-      return { 
-        id: response.data.data.user.open_id, 
-        name: response.data.data.user.display_name 
-      };
-    default:
-      throw new Error(`Unsupported platform: ${platform}`);
+    logger.info(`User info response received`, { 
+      platform, 
+      status: response.status,
+      data: response.data 
+    });
+
+    // Transform response based on platform
+    switch (platform) {
+      case 'instagram':
+        return { id: response.data.id, username: response.data.username };
+      case 'facebook':
+        return { id: response.data.id, name: response.data.name };
+      case 'linkedin':
+        return { 
+          id: response.data.id, 
+          name: `${response.data.localizedFirstName} ${response.data.localizedLastName}` 
+        };
+      case 'youtube':
+        const channel = response.data.items[0];
+        return { id: channel.id, name: channel.snippet.title };
+      case 'tiktok':
+        return { 
+          id: response.data.data.user.open_id, 
+          name: response.data.data.user.display_name 
+        };
+      default:
+        throw new Error(`Unsupported platform: ${platform}`);
+    }
+  } catch (error: any) {
+    logger.error(`Failed to get user info for ${platform}`, {
+      error: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      url: userInfoUrls[platform]
+    });
+    throw error;
+  }
+}
+
+// Exchange short-lived token for long-lived token (Instagram only)
+export async function exchangeForLongLivedToken(shortLivedToken: string): Promise<{ access_token: string; expires_in: number }> {
+  try {
+    logger.info('Exchanging for long-lived Instagram token');
+    
+    const response = await axios.get('https://graph.facebook.com/v19.0/oauth/access_token', {
+      params: {
+        grant_type: 'fb_exchange_token',
+        client_id: process.env.INSTAGRAM_CLIENT_ID,
+        client_secret: process.env.INSTAGRAM_CLIENT_SECRET,
+        fb_exchange_token: shortLivedToken
+      }
+    });
+    
+    logger.info('Long-lived token received', { 
+      expires_in: response.data.expires_in,
+      hasToken: !!response.data.access_token 
+    });
+    
+    return response.data;
+  } catch (error: any) {
+    logger.error('Failed to get long-lived token', {
+      error: error.message,
+      status: error.response?.status,
+      data: error.response?.data
+    });
+    throw error;
   }
 }

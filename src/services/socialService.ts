@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { decrypt, encrypt } from '../utils/crypto';
-import { SocialAccount } from '../models';
+import { SocialAccount } from '../models/tursoModels';
 import { PublishResult, OAuthTokens } from '../types';
 
 interface PlatformConfig {

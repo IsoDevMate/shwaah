@@ -44,7 +44,7 @@ router.post('/login', asyncHandler('Auth', 'Login')(async (req, res) => {
     return sendError(req, res, new Error('Invalid credentials'), 'Login failed', 401, 'INVALID_CREDENTIALS');
   }
   
-  const isValidPassword = await bcrypt.compare(password, user.password);
+  const isValidPassword = await bcrypt.compare(password, user.password as string);
   if (!isValidPassword) {
     return sendError(req, res, new Error('Invalid credentials'), 'Login failed', 401, 'INVALID_CREDENTIALS');
   }

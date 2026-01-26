@@ -103,7 +103,7 @@ async function startServer() {
       console.log('\n⏰ Scheduler running for automated posting');
     });
   } catch (error) {
-    logger.error('Server startup failed', { error: error.message, stack: error.stack });
+    logger.error('Server startup failed', { error: (error as Error).message, stack: (error as Error).stack });
     console.error('❌ Unable to start server:', error);
     process.exit(1);
   }
