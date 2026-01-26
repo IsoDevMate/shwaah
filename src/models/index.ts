@@ -1,5 +1,4 @@
 import { createClient } from '@libsql/client';
-import { dbLogger } from '../utils/logger';
 
 // Direct Turso client
 export const db = createClient({
@@ -26,17 +25,13 @@ export const testConnection = async () => {
 // Database operations
 export class Database {
   static async execute(sql: string, params: any[] = []) {
-    const start = Date.now();
-    dbLogger.query(sql, params);
-    
     try {
       const result = await db.execute({ sql, args: params });
-      const duration = Date.now() - start;
-      dbLogger.result(sql, result, duration);
       return result;
     } catch (error) {
-      dbLogger.error(sql, error);
       console.error('Database error:', error);
+      console.error('SQL:', sql);
+      console.error('Stack:', (error as Error).stack);
       throw error;
     }
   }

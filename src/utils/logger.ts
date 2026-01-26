@@ -1,106 +1,44 @@
-import winston from 'winston';
-import DailyRotateFile from 'winston-daily-rotate-file';
-import path from 'path';
-
-// Create logs directory if it doesn't exist
-const logsDir = path.join(process.cwd(), 'logs');
-
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.errors({ stack: true }),
-    winston.format.json(),
-    winston.format.printf(({ timestamp, level, message, ...meta }) => {
-      return JSON.stringify({
-        timestamp,
-        level,
-        message,
-        ...meta
-      }, (key, value) => {
-        // Handle BigInt serialization
-        if (typeof value === 'bigint') {
-          return value.toString();
-        }
-        return value;
-      });
-    })
-  ),
-  transports: [
-    // Console output
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple(),
-        winston.format.printf(({ timestamp, level, message, ...meta }) => {
-          const metaStr = Object.keys(meta).length ? JSON.stringify(meta, (key, value) => 
-            typeof value === 'bigint' ? value.toString() : value
-          ) : '';
-          return `${timestamp} [${level}]: ${message} ${metaStr}`;
-        })
-      )
-    }),
-    // Daily rotating error log
-    new DailyRotateFile({
-      filename: path.join(logsDir, 'error-%DATE%.log'),
-      datePattern: 'YYYY-MM-DD',
-      level: 'error',
-      maxFiles: '7d'
-    }),
-    // Daily rotating combined log
-    new DailyRotateFile({
-      filename: path.join(logsDir, 'combined-%DATE%.log'),
-      datePattern: 'YYYY-MM-DD',
-      maxFiles: '7d'
-    })
-  ]
-});
-
-// API request logging middleware
+// Simple console logger - no external dependencies
 export const requestLogger = (req: any, res: any, next: any) => {
-  // Only log non-health check requests
   if (req.url !== '/api/health') {
-    logger.info(`${req.method} ${req.url}`, { ip: req.ip });
+    console.log(`${req.method} ${req.url}`);
   }
   next();
 };
 
-// Database operation logger
+// Removed - use console.error directly for database errors
 export const dbLogger = {
-  query: (sql: string, params: any[] = []) => {
-    // Only log non-routine queries
-    if (!sql.includes('scheduled') && !sql.includes('SELECT * FROM Posts WHERE status')) {
-      logger.info(`DB: ${sql.substring(0, 50)}...`, { params });
-    }
-  },
-  
-  result: (sql: string, result: any, duration?: number) => {
-    // Only log slow queries or errors
-    if (duration && duration > 1000) {
-      logger.warn(`Slow query (${duration}ms): ${sql.substring(0, 50)}...`);
-    }
-  },
-  
+  query: () => {}, // No-op
+  result: () => {}, // No-op  
   error: (sql: string, error: any) => {
-    logger.error(`DB Error: ${error.message}`, { sql: sql.substring(0, 50) });
+    console.error('DB Error:', error);
+    console.error('Stack:', error.stack);
   }
 };
 
-// Service operation logger
+// Removed - use console.error directly for service errors
 export const serviceLogger = {
-  start: (service: string, operation: string, params?: any) => {
-    // Only log important operations
+  start: () => {}, // No-op
+  success: () => {}, // No-op
+  error: (service: string, operation: string, error: any) => {
+    console.error(`${service}.${operation} failed:`, error);
+    console.error('Stack:', error.stack);
+  }
+};
+
+// Simple logger object for compatibility
+const logger = {
+  info: (message: string, meta?: any) => {
+    console.log(message, meta || '');
   },
-  
-  success: (service: string, operation: string, result?: any, duration?: number) => {
-    // Only log slow operations
-    if (duration && duration > 2000) {
-      logger.warn(`Slow ${service}.${operation} (${duration}ms)`);
+  error: (message: string, meta?: any) => {
+    console.error(message, meta || '');
+    if (meta?.stack) {
+      console.error('Stack:', meta.stack);
     }
   },
-  
-  error: (service: string, operation: string, error: any) => {
-    logger.error(`${service}.${operation} failed: ${error.message}`);
+  warn: (message: string, meta?: any) => {
+    console.warn(message, meta || '');
   }
 };
 

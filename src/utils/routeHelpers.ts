@@ -1,46 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
-import logger, { serviceLogger } from '../utils/logger';
 import { ResponseUtil } from './ResponseUtil';
 
-// Async route handler wrapper with logging
+// Async route handler wrapper with simple console logging
 export const asyncHandler = (serviceName: string, operationName: string) => {
   return (fn: (req: Request, res: Response, next: NextFunction) => Promise<any>) => {
     return async (req: Request, res: Response, next: NextFunction) => {
-      const start = Date.now();
-      
       try {
-        serviceLogger.start(serviceName, operationName, {
-          method: req.method,
-          url: req.url,
-          params: req.params,
-          query: req.query,
-          userId: (req as any).user?.id
-        });
-        
-        const result = await fn(req, res, next);
-        const duration = Date.now() - start;
-        
-        serviceLogger.success(serviceName, operationName, {
-          statusCode: res.statusCode,
-          responseTime: `${duration}ms`
-        }, duration);
-        
-        return result;
+        return await fn(req, res, next);
       } catch (error) {
-        const duration = Date.now() - start;
-        serviceLogger.error(serviceName, operationName, error);
+        console.error(`\n=== ERROR in ${serviceName}.${operationName} ===`);
+        console.error(`Route: ${req.method} ${req.url}`);
+        console.error(`Error:`, error);
+        console.error(`Stack:`, (error as Error).stack);
+        console.error(`=== END ERROR ===\n`);
         
-        logger.error('Route Handler Error', {
-          service: serviceName,
-          operation: operationName,
-          method: req.method,
-          url: req.url,
-          error: error.message,
-          stack: error.stack,
-          duration: `${duration}ms`
-        });
-        
-        // Use standardized error response
         return ResponseUtil.error(res, 500, 'Internal server error', error);
       }
     };
@@ -67,7 +40,10 @@ export const sendError = (
   statusCode = 500,
   errorCode?: string
 ) => {
-  logger.error(`${req.method} ${req.url} - ${error.message}`);
+  console.error(`\n=== ERROR: ${req.method} ${req.url} ===`);
+  console.error('Error:', error);
+  console.error('Stack:', error.stack);
+  console.error('=== END ERROR ===\n');
   return ResponseUtil.error(res, statusCode, message || error.message, error, errorCode);
 };
 

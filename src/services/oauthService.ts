@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { OAuthTokens, PlatformUserInfo } from '../types';
-import logger from '../utils/logger';
 
 // Exchange authorization code for access tokens
 export async function exchangeCodeForTokens(platform: string, code: string): Promise<OAuthTokens> {
@@ -8,7 +7,7 @@ export async function exchangeCodeForTokens(platform: string, code: string): Pro
   const clientSecret = process.env[`${platform.toUpperCase()}_CLIENT_SECRET`];
   const redirectUri = `${process.env.REDIRECT_URI}/${platform}`;
 
-  logger.info(`Token exchange attempt`, { platform, clientId: clientId?.substring(0, 8) + '...', redirectUri });
+  // Remove verbose logging
 
   const tokenUrls: Record<string, string> = {
     instagram: 'https://graph.facebook.com/v19.0/oauth/access_token', // Use Facebook Graph API for Instagram Business
@@ -56,7 +55,7 @@ export async function exchangeCodeForTokens(platform: string, code: string): Pro
   };
 
   try {
-    logger.info(`Making token request to ${tokenUrls[platform]}`);
+    // Remove verbose logging
     
     let response;
     if (platform === 'instagram') {
@@ -71,23 +70,12 @@ export async function exchangeCodeForTokens(platform: string, code: string): Pro
       });
     }
     
-    logger.info(`Token response received`, { 
-      platform, 
-      status: response.status,
-      hasAccessToken: !!response.data.access_token,
-      tokenType: response.data.token_type
-    });
+    // Remove verbose logging
     
     return response.data;
   } catch (error: any) {
-    logger.error(`Token exchange failed for ${platform}`, {
-      error: error.message,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      url: tokenUrls[platform],
-      requestData: { ...tokenData[platform], client_secret: '[HIDDEN]' }
-    });
+    console.error(`Token exchange failed for ${platform}:`, error);
+    console.error('Stack:', error.stack);
     throw error;
   }
 }
@@ -103,16 +91,12 @@ export async function getPlatformUserInfo(platform: string, accessToken: string)
   };
 
   try {
-    logger.info(`Getting user info from ${platform}`, { url: userInfoUrls[platform] });
+    // Remove verbose logging
     const response = await axios.get(userInfoUrls[platform], {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
 
-    logger.info(`User info response received`, { 
-      platform, 
-      status: response.status,
-      data: response.data 
-    });
+    // Remove verbose logging
 
     // Transform response based on platform
     switch (platform) {
@@ -137,13 +121,8 @@ export async function getPlatformUserInfo(platform: string, accessToken: string)
         throw new Error(`Unsupported platform: ${platform}`);
     }
   } catch (error: any) {
-    logger.error(`Failed to get user info for ${platform}`, {
-      error: error.message,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      url: userInfoUrls[platform]
-    });
+    console.error(`Failed to get user info for ${platform}:`, error);
+    console.error('Stack:', error.stack);
     throw error;
   }
 }
@@ -151,7 +130,7 @@ export async function getPlatformUserInfo(platform: string, accessToken: string)
 // Exchange short-lived token for long-lived token (Instagram only)
 export async function exchangeForLongLivedToken(shortLivedToken: string): Promise<{ access_token: string; expires_in: number }> {
   try {
-    logger.info('Exchanging for long-lived Instagram token');
+    // Remove verbose logging
     
     const response = await axios.get('https://graph.facebook.com/v19.0/oauth/access_token', {
       params: {
@@ -162,18 +141,12 @@ export async function exchangeForLongLivedToken(shortLivedToken: string): Promis
       }
     });
     
-    logger.info('Long-lived token received', { 
-      expires_in: response.data.expires_in,
-      hasToken: !!response.data.access_token 
-    });
+    // Remove verbose logging
     
     return response.data;
   } catch (error: any) {
-    logger.error('Failed to get long-lived token', {
-      error: error.message,
-      status: error.response?.status,
-      data: error.response?.data
-    });
+    console.error('Failed to get long-lived token:', error);
+    console.error('Stack:', error.stack);
     throw error;
   }
 }

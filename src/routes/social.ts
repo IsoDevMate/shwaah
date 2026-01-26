@@ -5,7 +5,6 @@ import { authenticateUser } from '../middleware/auth';
 import { encrypt, decrypt } from '../utils/crypto';
 import { AuthRequest, OAuthTokens, PlatformUserInfo } from '../types';
 import { asyncHandler, sendSuccess, sendError } from '../utils/routeHelpers';
-import logger from '../utils/logger';
 import { exchangeCodeForTokens, getPlatformUserInfo, exchangeForLongLivedToken } from '../services/oauthService';
 
 const router = express.Router();
@@ -61,32 +60,26 @@ router.get('/callback/:platform', asyncHandler('Social', 'OAuthCallback')(async 
   const { platform } = req.params;
   const { code, state: userId, error, error_description } = req.query;
   
-  logger.info(`OAuth callback for ${platform}`, { 
-    code: code ? 'present' : 'missing',
-    userId,
-    error,
-    error_description,
-    query: req.query 
-  });
+  // Remove verbose logging
   
   if (error) {
-    logger.error(`OAuth error from ${platform}`, { error, error_description });
+    console.error(`OAuth error from ${platform}:`, error, error_description);
     return sendError(req, res, new Error(`OAuth error: ${error_description || error}`), 'OAuth authorization failed', 400, 'OAUTH_ERROR');
   }
   
   if (!code || !userId) {
-    logger.error(`Missing OAuth params for ${platform}`, { code: !!code, userId: !!userId });
+    console.error(`Missing OAuth params for ${platform}:`, { code: !!code, userId: !!userId });
     return sendError(req, res, new Error('Missing code or state'), 'OAuth callback failed', 400, 'MISSING_OAUTH_PARAMS');
   }
   
   try {
-    logger.info(`Exchanging code for tokens - ${platform}`);
+    // Remove verbose logging
     // Exchange code for tokens
     let tokens = await exchangeCodeForTokens(platform, code as string);
     
     // For Instagram, exchange short-lived token for long-lived token (60 days)
     if (platform === 'instagram') {
-      logger.info('Getting long-lived token for Instagram');
+      // Remove verbose logging
       const longLivedTokenData = await exchangeForLongLivedToken(tokens.access_token);
       tokens = {
         ...tokens,
@@ -95,12 +88,12 @@ router.get('/callback/:platform', asyncHandler('Social', 'OAuthCallback')(async 
       };
     }
     
-    logger.info(`Token exchange successful - ${platform}`, { hasAccessToken: !!tokens.access_token });
+    // Remove verbose logging
     
-    logger.info(`Getting user info - ${platform}`);
+    // Remove verbose logging
     // Get user info from platform
     const userInfo = await getPlatformUserInfo(platform, tokens.access_token);
-    logger.info(`User info retrieved - ${platform}`, { userId: userInfo.id, username: userInfo.username || userInfo.name });
+    // Remove verbose logging
     
     // Save to database
     await SocialAccount.upsert({
@@ -114,15 +107,11 @@ router.get('/callback/:platform', asyncHandler('Social', 'OAuthCallback')(async 
       isActive: true
     });
     
-    logger.info(`Account saved successfully - ${platform}`);
+    // Remove verbose logging
     res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3001'}/dashboard?connected=${platform}`);
   } catch (error: any) {
-    logger.error(`OAuth callback failed for ${platform}`, { 
-      error: error.message,
-      stack: error.stack,
-      response: error.response?.data,
-      status: error.response?.status
-    });
+    console.error(`OAuth callback failed for ${platform}:`, error);
+    console.error('Stack:', error.stack);
     return sendError(req, res, error, `${platform} connection failed`, 500, 'OAUTH_CALLBACK_ERROR');
   }
 }));

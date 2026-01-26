@@ -4,7 +4,7 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import { Database } from './models';
-import logger, { requestLogger } from './utils/logger';
+import { requestLogger } from './utils/logger';
 import { ResponseUtil } from './utils/ResponseUtil';
 
 // Import routes
@@ -103,7 +103,7 @@ async function startServer() {
       console.log('\n⏰ Scheduler running for automated posting');
     });
   } catch (error) {
-    logger.error('Server startup failed', { error: (error as Error).message, stack: (error as Error).stack });
+    console.error('Server startup failed:', error);
     console.error('❌ Unable to start server:', error);
     process.exit(1);
   }
@@ -111,13 +111,8 @@ async function startServer() {
 
 // Global error handler
 app.use((error: any, req: any, res: any, next: any) => {
-  logger.error('Unhandled Error', {
-    method: req.method,
-    url: req.url,
-    error: error.message,
-    stack: error.stack,
-    body: req.body
-  });
+  console.error('Unhandled Error:', error);
+  console.error('Stack:', error.stack);
 
   return ResponseUtil.error(
     res, 
@@ -130,12 +125,13 @@ app.use((error: any, req: any, res: any, next: any) => {
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason: any, promise) => {
-  logger.error('Unhandled Promise Rejection', { reason: reason?.message || reason, stack: reason?.stack });
+  console.error('Unhandled Promise Rejection:', reason);
 });
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
-  logger.error('Uncaught Exception', { error: error.message, stack: error.stack });
+  console.error('Uncaught Exception:', error);
+  console.error('Stack:', error.stack);
   process.exit(1);
 });
 
