@@ -5,7 +5,11 @@ import { OAuthTokens, PlatformUserInfo } from '../types';
 export async function exchangeCodeForTokens(platform: string, code: string): Promise<OAuthTokens> {
   const clientId = process.env[`${platform.toUpperCase()}_CLIENT_ID`];
   const clientSecret = process.env[`${platform.toUpperCase()}_CLIENT_SECRET`];
-  const redirectUri = `${process.env.REDIRECT_URI}/${platform}`;
+  
+  // Use hardcoded redirect URI for TikTok to ensure consistency
+  const redirectUri = platform === 'tiktok' 
+    ? 'https://shwaah.onrender.com/api/social/callback/tiktok'
+    : process.env[`${platform.toUpperCase()}_REDIRECT_URI`] || `${process.env.REDIRECT_URI}/${platform}`;
 
   // Remove verbose logging
 

@@ -19,7 +19,10 @@ const PLATFORM_SCOPES: Record<string, string> = {
 
 const getAuthUrl = (platform: string, userId: number): string => {
   const clientId = process.env[`${platform.toUpperCase()}_CLIENT_ID`];
-  const redirectUri = process.env[`${platform.toUpperCase()}_REDIRECT_URI`];
+  // Use hardcoded redirect URI for TikTok to ensure consistency
+  const redirectUri = platform === 'tiktok' 
+    ? 'https://shwaah.onrender.com/api/social/callback/tiktok'
+    : process.env[`${platform.toUpperCase()}_REDIRECT_URI`];
   const scopes = PLATFORM_SCOPES[platform];
   
   if (!clientId) {
