@@ -92,6 +92,7 @@ router.get('/callback/:platform', asyncHandler('Social', 'OAuthCallback')(async 
     
     // Remove verbose logging
     // Get user info from platform
+    console.log('TikTok tokens received:', platform === 'tiktok' ? tokens : 'Not TikTok');
     const userInfo = await getPlatformUserInfo(
       platform, 
       tokens.access_token,

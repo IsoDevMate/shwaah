@@ -79,7 +79,9 @@ export async function exchangeCodeForTokens(platform: string, code: string): Pro
     
     if (platform === 'tiktok') {
       // TikTok v2 returns data in a nested structure
+      console.log('TikTok raw response:', response.data);
       const data = response.data.data || response.data;
+      console.log('TikTok extracted data:', data);
       return {
         access_token: data.access_token,
         refresh_token: data.refresh_token,
