@@ -156,9 +156,12 @@ const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: 
     throw new Error('TikTok requires video content');
   }
   
-  // Use PULL_FROM_URL method as per TikTok docs
+  // Get video file from R2
   const signedUrl = await getSignedUrlForFile(mediaUrl);
+  const videoResponse = await axios.get(signedUrl, { responseType: 'arraybuffer' });
+  const videoBuffer = Buffer.from(videoResponse.data);
   
+  // Step 1: Initialize upload
   const initResponse = await axios.post(
     'https://open.tiktokapis.com/v2/post/publish/video/init/',
     {
@@ -171,8 +174,10 @@ const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: 
         video_cover_timestamp_ms: 1000
       },
       source_info: {
-        source: 'PULL_FROM_URL',
-        video_url: signedUrl
+        source: 'FILE_UPLOAD',
+        video_size: videoBuffer.length,
+        chunk_size: videoBuffer.length,
+        total_chunk_count: 1
       }
     },
     {
@@ -183,7 +188,18 @@ const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: 
     }
   );
   
-  return initResponse.data;
+  const { publish_id, upload_url } = initResponse.data.data;
+  
+  // Step 2: Upload video file
+  await axios.put(upload_url, videoBuffer, {
+    headers: {
+      'Content-Type': 'video/mp4',
+      'Content-Length': videoBuffer.length.toString(),
+      'Content-Range': `bytes 0-${videoBuffer.length - 1}/${videoBuffer.length}`
+    }
+  });
+  
+  return { publish_id };
 };
 
 export const publishToSocial = async (
