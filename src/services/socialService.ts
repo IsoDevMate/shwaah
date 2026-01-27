@@ -152,54 +152,94 @@ const publishToYouTube = async (accessToken: string, content: string, mediaUrl?:
 };
 
 const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: string): Promise<any> => {
+  console.log('[TikTok] Starting publish process');
+  console.log('[TikTok] Media URL:', mediaUrl);
+  
   if (!mediaUrl) {
-    throw new Error('TikTok requires video content');
+    throw new Error('TikTok requires video content. Please upload a video file.');
   }
   
-  // Get video file from R2
-  const signedUrl = await getSignedUrlForFile(mediaUrl);
-  const videoResponse = await axios.get(signedUrl, { responseType: 'arraybuffer' });
-  const videoBuffer = Buffer.from(videoResponse.data);
-  
-  // Step 1: Initialize upload
-  const initResponse = await axios.post(
-    'https://open.tiktokapis.com/v2/post/publish/video/init/',
-    {
-      post_info: {
-        title: content.substring(0, 150),
-        privacy_level: 'PUBLIC_TO_EVERYONE',
-        disable_duet: false,
-        disable_comment: false,
-        disable_stitch: false,
-        video_cover_timestamp_ms: 1000
+  try {
+    // Get video file from R2
+    console.log('[TikTok] Fetching video from R2...');
+    const signedUrl = await getSignedUrlForFile(mediaUrl);
+    console.log('[TikTok] Signed URL obtained');
+    
+    const videoResponse = await axios.get(signedUrl, { 
+      responseType: 'arraybuffer',
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity
+    });
+    
+    if (!videoResponse.data) {
+      throw new Error('Failed to fetch video from storage. Video data is empty.');
+    }
+    
+    const videoBuffer = Buffer.from(videoResponse.data);
+    console.log('[TikTok] Video fetched successfully, size:', videoBuffer.length, 'bytes');
+    
+    if (videoBuffer.length === 0) {
+      throw new Error('Video file is empty');
+    }
+    
+    // Step 1: Initialize upload
+    console.log('[TikTok] Initializing upload...');
+    const initResponse = await axios.post(
+      'https://open.tiktokapis.com/v2/post/publish/video/init/',
+      {
+        post_info: {
+          title: content.substring(0, 150),
+          privacy_level: 'PUBLIC_TO_EVERYONE',
+          disable_duet: false,
+          disable_comment: false,
+          disable_stitch: false,
+          video_cover_timestamp_ms: 1000
+        },
+        source_info: {
+          source: 'FILE_UPLOAD',
+          video_size: videoBuffer.length,
+          chunk_size: videoBuffer.length,
+          total_chunk_count: 1
+        }
       },
-      source_info: {
-        source: 'FILE_UPLOAD',
-        video_size: videoBuffer.length,
-        chunk_size: videoBuffer.length,
-        total_chunk_count: 1
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json; charset=UTF-8'
+        }
       }
-    },
-    {
+    );
+    
+    console.log('[TikTok] Init response:', JSON.stringify(initResponse.data, null, 2));
+    
+    const { publish_id, upload_url } = initResponse.data.data;
+    
+    if (!upload_url) {
+      throw new Error('TikTok did not return an upload URL');
+    }
+    
+    console.log('[TikTok] Got publish_id:', publish_id);
+    
+    // Step 2: Upload video file
+    console.log('[TikTok] Uploading video to TikTok...');
+    await axios.put(upload_url, videoBuffer, {
       headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json; charset=UTF-8'
-      }
-    }
-  );
-  
-  const { publish_id, upload_url } = initResponse.data.data;
-  
-  // Step 2: Upload video file
-  await axios.put(upload_url, videoBuffer, {
-    headers: {
-      'Content-Type': 'video/mp4',
-      'Content-Length': videoBuffer.length.toString(),
-      'Content-Range': `bytes 0-${videoBuffer.length - 1}/${videoBuffer.length}`
-    }
-  });
-  
-  return { publish_id };
+        'Content-Type': 'video/mp4',
+        'Content-Length': videoBuffer.length.toString(),
+        'Content-Range': `bytes 0-${videoBuffer.length - 1}/${videoBuffer.length}`
+      },
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity
+    });
+    
+    console.log('[TikTok] Video uploaded successfully');
+    
+    return { publish_id, status: 'Processing', message: 'Video uploaded successfully and is being processed by TikTok' };
+  } catch (error: any) {
+    console.error('[TikTok] Publishing failed:', error.message);
+    console.error('[TikTok] Error details:', error.response?.data || error);
+    throw new Error(`TikTok publishing failed: ${error.response?.data?.error?.message || error.message}`);
+  }
 };
 
 export const publishToSocial = async (
@@ -208,25 +248,44 @@ export const publishToSocial = async (
   content: string, 
   mediaUrl?: string
 ): Promise<any> => {
+  console.log(`\n[${platform}] Starting publish process`);
+  console.log(`[${platform}] Has media URL:`, !!mediaUrl);
+  
   if (!accessToken) {
     throw new Error(`No access token found for ${platform}`);
   }
   
   const decryptedToken = decrypt(accessToken);
   
-  switch (platform) {
-    case 'instagram':
-      return await publishToInstagram(decryptedToken, content, mediaUrl);
-    case 'facebook':
-      return await publishToFacebook(decryptedToken, content, mediaUrl);
-    case 'linkedin':
-      return await publishToLinkedIn(decryptedToken, content, mediaUrl);
-    case 'youtube':
-      return await publishToYouTube(decryptedToken, content, mediaUrl);
-    case 'tiktok':
-      return await publishToTikTok(decryptedToken, content, mediaUrl);
-    default:
-      throw new Error(`Unsupported platform: ${platform}`);
+  try {
+    let result;
+    
+    switch (platform) {
+      case 'instagram':
+        result = await publishToInstagram(decryptedToken, content, mediaUrl);
+        break;
+      case 'facebook':
+        result = await publishToFacebook(decryptedToken, content, mediaUrl);
+        break;
+      case 'linkedin':
+        result = await publishToLinkedIn(decryptedToken, content, mediaUrl);
+        break;
+      case 'youtube':
+        result = await publishToYouTube(decryptedToken, content, mediaUrl);
+        break;
+      case 'tiktok':
+        result = await publishToTikTok(decryptedToken, content, mediaUrl);
+        break;
+      default:
+        throw new Error(`Unsupported platform: ${platform}`);
+    }
+    
+    console.log(`[${platform}] Publish successful`);
+    return result;
+  } catch (error: any) {
+    console.error(`[${platform}] Publish error:`, error.message);
+    console.error(`[${platform}] Error stack:`, error.stack);
+    throw error;
   }
 };
 

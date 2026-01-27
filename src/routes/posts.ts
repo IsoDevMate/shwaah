@@ -76,11 +76,21 @@ router.post('/publish/:postId', authenticateUser, async (req: AuthRequest, res) 
   try {
     const { postId } = req.params;
     
-    const post = await Post.findById(parseInt(postId));
+    console.log(`[Publish] Starting publish for post ${postId}`);
+    
+    const post = await Post.findById(postId);
     
     if (!post) {
+      console.error(`[Publish] Post not found: ${postId}`);
       return res.status(404).json({ error: 'Post not found' });
     }
+    
+    console.log('[Publish] Post data:', {
+      id: post.id,
+      platforms: post.platforms,
+      mediaUrls: post.mediaUrls,
+      status: post.status
+    });
     
     if (post.status === 'published') {
       return res.status(400).json({ error: 'Post already published' });
@@ -89,28 +99,40 @@ router.post('/publish/:postId', authenticateUser, async (req: AuthRequest, res) 
     // Get connected accounts for selected platforms
     const connectedAccounts = await SocialAccount.findByUserAndPlatforms(req.user!.id, post.platforms);
     
+    console.log(`[Publish] Found ${connectedAccounts.length} connected accounts`);
+    
     const publishResults: Record<string, PublishResult> = {};
     const publishPromises = connectedAccounts.map(async (account: any) => {
       try {
+        console.log(`[Publish] Publishing to ${account.platform}...`);
+        
         // Refresh token if needed
         const refreshedAccount = await refreshTokenIfNeeded(account);
+        
+        // Get the first media URL (or undefined if no media)
+        const mediaUrl = post.mediaUrls && post.mediaUrls.length > 0 ? post.mediaUrls[0] : undefined;
+        
+        console.log(`[Publish] ${account.platform} - Media URL:`, mediaUrl);
         
         // Publish to platform
         const result = await publishToSocial(
           account.platform, 
           refreshedAccount.accessToken, 
           post.content, 
-          post.mediaUrls?.[0] // Use first media URL for now
+          mediaUrl
         );
         
         publishResults[account.platform] = {
           success: true,
           data: result
         };
-      } catch (error) {
+        
+        console.log(`[Publish] ${account.platform} - Success`);
+      } catch (error: any) {
+        console.error(`[Publish] ${account.platform} - Error:`, error.message);
         publishResults[account.platform] = {
           success: false,
-          error: (error as Error).message
+          error: error.message
         };
       }
     });
@@ -119,18 +141,29 @@ router.post('/publish/:postId', authenticateUser, async (req: AuthRequest, res) 
     
     // Update post status
     const hasFailures = Object.values(publishResults).some(result => !result.success);
-    const status = hasFailures ? 'failed' : 'published';
+    const allFailed = Object.values(publishResults).every(result => !result.success);
+    const status = allFailed ? 'failed' : hasFailures ? 'partial' : 'published';
     
-    await Post.update(parseInt(postId), {
+    console.log(`[Publish] Final status: ${status}`);
+    console.log(`[Publish] Results:`, publishResults);
+    
+    await Post.update(postId, {
       status,
       publishResults
     });
     
+    const message = allFailed 
+      ? 'Post failed successfully' 
+      : hasFailures 
+        ? 'Post published partially - some platforms failed'
+        : 'Post published successfully';
+    
     res.json({ 
-      message: `Post ${status} successfully`,
+      message,
       results: publishResults 
     });
   } catch (error) {
+    console.error('[Publish] Unhandled error:', error);
     res.status(500).json({ error: (error as Error).message });
   }
 });
@@ -179,7 +212,7 @@ router.delete('/:postId', authenticateUser, async (req: AuthRequest, res) => {
   try {
     const { postId } = req.params;
     
-    const deleted = await Post.delete(parseInt(postId), req.user!.id);
+    const deleted = await Post.delete(postId, req.user!.id);
     
     if (!deleted) {
       return res.status(404).json({ error: 'Post not found' });

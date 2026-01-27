@@ -2,10 +2,10 @@ import { Request } from 'express';
 
 // Minimal User interface for authentication context
 export interface AuthUser {
-  id: number;
+  id: string; // Changed from number to string for UUID
   email: string;
   name: string;
-  password?: string; // Password might be present but often omitted for security in context
+  password?: string;
 }
 
 export interface AuthRequest extends Request {
@@ -35,23 +35,23 @@ export interface PlatformUserInfo {
 }
 
 export interface PostDB {
-  id: number;
-  userId: number;
+  id: string; // Changed from number to string for UUID
+  userId: string; // Changed from number to string for UUID
   content: string;
   mediaUrls: string[];
   platforms: string[];
   status: string;
-  publishResults: any; // Can be more specific if needed
-  scheduledAt?: string; // or Date, depending on how it's handled after retrieval
-  campaignId?: number;
+  publishResults: any;
+  scheduledAt?: string;
+  campaignId?: string; // Changed from number to string for UUID
   createdAt: string;
   updatedAt: string;
 }
 
 // These are original interfaces from the file, keeping them
 export interface SocialAccount {
-  id: number;
-  user_id: number;
+  id: string; // Changed from number to string for UUID
+  user_id: string; // Changed from number to string for UUID
   platform: 'instagram' | 'tiktok' | 'youtube';
   account_id: string;
   access_token: string;
@@ -60,8 +60,8 @@ export interface SocialAccount {
 }
 
 export interface Post {
-  id: number;
-  user_id: number;
+  id: string; // Changed from number to string for UUID
+  user_id: string; // Changed from number to string for UUID
   content: string;
   media_urls: string[];
   platforms: string[];
@@ -71,8 +71,8 @@ export interface Post {
 }
 
 export interface Campaign {
-  id: number;
-  user_id: number;
+  id: string; // Changed from number to string for UUID
+  user_id: string; // Changed from number to string for UUID
   name: string;
   start_date: string;
   end_date: string;

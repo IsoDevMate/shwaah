@@ -6,6 +6,15 @@ export const db = createClient({
   authToken: process.env.TURSO_AUTH_TOKEN
 });
 
+// Generate UUID v4
+export const generateUUID = () => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
 // Test connection first
 export const testConnection = async () => {
   try {
@@ -43,10 +52,10 @@ export class Database {
       throw new Error('Failed to connect to Turso database');
     }
     
-    // Create tables
+    // Create tables with UUID primary keys
     await this.execute(`
       CREATE TABLE IF NOT EXISTS Users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT PRIMARY KEY,
         email TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
         name TEXT NOT NULL,
@@ -57,8 +66,8 @@ export class Database {
 
     await this.execute(`
       CREATE TABLE IF NOT EXISTS SocialAccounts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        userId INTEGER NOT NULL,
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
         platform TEXT NOT NULL,
         platformUserId TEXT NOT NULL,
         platformUsername TEXT,
@@ -74,15 +83,15 @@ export class Database {
 
     await this.execute(`
       CREATE TABLE IF NOT EXISTS Posts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        userId INTEGER NOT NULL,
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
         content TEXT NOT NULL,
         mediaUrls TEXT,
         platforms TEXT NOT NULL,
         status TEXT DEFAULT 'pending',
         publishResults TEXT,
         scheduledAt DATETIME,
-        campaignId INTEGER,
+        campaignId TEXT,
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (userId) REFERENCES Users(id)
@@ -91,8 +100,8 @@ export class Database {
 
     await this.execute(`
       CREATE TABLE IF NOT EXISTS Campaigns (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        userId INTEGER NOT NULL,
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
         name TEXT NOT NULL,
         description TEXT,
         startDate DATETIME NOT NULL,
@@ -106,8 +115,8 @@ export class Database {
 
     await this.execute(`
       CREATE TABLE IF NOT EXISTS Analytics (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        postId INTEGER NOT NULL,
+        id TEXT PRIMARY KEY,
+        postId TEXT NOT NULL,
         platform TEXT NOT NULL,
         views INTEGER DEFAULT 0,
         likes INTEGER DEFAULT 0,

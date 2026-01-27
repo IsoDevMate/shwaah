@@ -1,11 +1,11 @@
-import { Database } from '../models';
-import { AuthUser } from '../types';
-import { Value } from '@libsql/client'; // Import Value type
+import { Database, generateUUID } from '../models';
+import { AuthUser, PostDB } from '../types';
+import { Value } from '@libsql/client';
 
 // Helper to convert a database Row to an AuthUser
 function rowToAuthUser(row: Record<string, Value>): AuthUser {
   return {
-    id: Number(row.id),
+    id: String(row.id),
     email: String(row.email),
     name: String(row.name),
     password: String(row.password),
@@ -14,11 +14,12 @@ function rowToAuthUser(row: Record<string, Value>): AuthUser {
 
 export class User {
   static async create(data: { email: string; password: string; name: string }) {
-    const result = await Database.execute(
-      'INSERT INTO Users (email, password, name) VALUES (?, ?, ?)',
-      [data.email, data.password, data.name]
+    const id = generateUUID();
+    await Database.execute(
+      'INSERT INTO Users (id, email, password, name) VALUES (?, ?, ?, ?)',
+      [id, data.email, data.password, data.name]
     );
-    return { id: Number(result.lastInsertRowid), ...data };
+    return { id, ...data };
   }
 
   static async findByEmail(email: string): Promise<AuthUser | null> {
@@ -26,7 +27,7 @@ export class User {
     return result.rows[0] ? rowToAuthUser(result.rows[0]) : null;
   }
 
-  static async findById(id: number): Promise<AuthUser | null> {
+  static async findById(id: string): Promise<AuthUser | null> {
     const result = await Database.execute('SELECT * FROM Users WHERE id = ?', [id]);
     return result.rows[0] ? rowToAuthUser(result.rows[0]) : null;
   }
@@ -34,14 +35,15 @@ export class User {
 
 export class SocialAccount {
   static async create(data: any) {
-    const result = await Database.execute(
-      'INSERT INTO SocialAccounts (userId, platform, platformUserId, platformUsername, accessToken, refreshToken, expiresAt, isActive) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [data.userId, data.platform, data.platformUserId, data.platformUsername, data.accessToken, data.refreshToken, data.expiresAt, data.isActive]
+    const id = generateUUID();
+    await Database.execute(
+      'INSERT INTO SocialAccounts (id, userId, platform, platformUserId, platformUsername, accessToken, refreshToken, expiresAt, isActive) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, data.userId, data.platform, data.platformUserId, data.platformUsername, data.accessToken, data.refreshToken, data.expiresAt, data.isActive]
     );
-    return { id: result.lastInsertRowid, ...data };
+    return { id, ...data };
   }
 
-  static async findByUserAndPlatforms(userId: number, platforms: string[]) {
+  static async findByUserAndPlatforms(userId: string, platforms: string[]) {
     const placeholders = platforms.map(() => '?').join(',');
     const result = await Database.execute(
       `SELECT * FROM SocialAccounts WHERE userId = ? AND platform IN (${placeholders}) AND isActive = 1`,
@@ -50,7 +52,7 @@ export class SocialAccount {
     return result.rows;
   }
 
-  static async findByUser(userId: number) {
+  static async findByUser(userId: string) {
     const result = await Database.execute(
       'SELECT * FROM SocialAccounts WHERE userId = ? AND isActive = 1',
       [userId]
@@ -58,12 +60,12 @@ export class SocialAccount {
     return result.rows;
   }
 
-  static async findById(id: number) {
+  static async findById(id: string) {
     const result = await Database.execute('SELECT * FROM SocialAccounts WHERE id = ?', [id]);
     return result.rows[0] || null;
   }
 
-  static async update(id: number, data: any) {
+  static async update(id: string, data: any) {
     await Database.execute(
       'UPDATE SocialAccounts SET accessToken = ?, expiresAt = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
       [data.accessToken, data.expiresAt, id]
@@ -71,7 +73,7 @@ export class SocialAccount {
     return await this.findById(id);
   }
 
-  static async updateByUserAndPlatform(userId: number, platform: string, data: any) {
+  static async updateByUserAndPlatform(userId: string, platform: string, data: any) {
     await Database.execute(
       'UPDATE SocialAccounts SET isActive = ?, updatedAt = CURRENT_TIMESTAMP WHERE userId = ? AND platform = ?',
       [data.isActive, userId, platform]
@@ -89,7 +91,7 @@ export class SocialAccount {
         'UPDATE SocialAccounts SET platformUserId = ?, platformUsername = ?, accessToken = ?, refreshToken = ?, expiresAt = ?, isActive = ?, updatedAt = CURRENT_TIMESTAMP WHERE userId = ? AND platform = ?',
         [data.platformUserId, data.platformUsername, data.accessToken, data.refreshToken, data.expiresAt, data.isActive, data.userId, data.platform]
       );
-      return { id: existing.rows[0].id, ...data };
+      return { id: String(existing.rows[0].id), ...data };
     } else {
       return await this.create(data);
     }
@@ -103,15 +105,15 @@ function rowToPostDB(row: Record<string, Value>): PostDB {
   const publishResults = row.publishResults ? JSON.parse(String(row.publishResults)) : null;
 
   return {
-    id: Number(row.id),
-    userId: Number(row.userId),
+    id: String(row.id),
+    userId: String(row.userId),
     content: String(row.content),
-    mediaUrls: mediaUrls, // Already parsed to string[]
-    platforms: platforms, // Already parsed to string[]
+    mediaUrls: mediaUrls,
+    platforms: platforms,
     status: String(row.status),
     publishResults: publishResults,
     scheduledAt: row.scheduledAt ? String(row.scheduledAt) : undefined,
-    campaignId: row.campaignId ? Number(row.campaignId) : undefined,
+    campaignId: row.campaignId ? String(row.campaignId) : undefined,
     createdAt: String(row.createdAt),
     updatedAt: String(row.updatedAt),
   };
@@ -119,32 +121,32 @@ function rowToPostDB(row: Record<string, Value>): PostDB {
 
 export class Post {
   static async create(data: any): Promise<PostDB> {
-    const result = await Database.execute(
-      'INSERT INTO Posts (userId, content, mediaUrls, platforms, status, scheduledAt, campaignId) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [data.userId, data.content, JSON.stringify(data.mediaUrls), JSON.stringify(data.platforms), data.status, data.scheduledAt, data.campaignId]
+    const id = generateUUID();
+    await Database.execute(
+      'INSERT INTO Posts (id, userId, content, mediaUrls, platforms, status, scheduledAt, campaignId) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, data.userId, data.content, JSON.stringify(data.mediaUrls), JSON.stringify(data.platforms), data.status, data.scheduledAt, data.campaignId]
     );
-    const newId = Number(result.lastInsertRowid);
     return { 
-      id: newId, 
+      id, 
       userId: data.userId,
       content: data.content,
       mediaUrls: data.mediaUrls,
       platforms: data.platforms,
       status: data.status,
-      publishResults: null, // Initially no publish results
+      publishResults: null,
       scheduledAt: data.scheduledAt,
       campaignId: data.campaignId,
-      createdAt: new Date().toISOString(), // Placeholder, DB sets actual
-      updatedAt: new Date().toISOString() // Placeholder
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
   }
 
-  static async findById(id: number): Promise<PostDB | null> {
+  static async findById(id: string): Promise<PostDB | null> {
     const result = await Database.execute('SELECT * FROM Posts WHERE id = ?', [id]);
     return result.rows[0] ? rowToPostDB(result.rows[0]) : null;
   }
 
-  static async findByUser(userId: number): Promise<PostDB[]> {
+  static async findByUser(userId: string): Promise<PostDB[]> {
     const result = await Database.execute(
       'SELECT * FROM Posts WHERE userId = ? ORDER BY createdAt DESC',
       [userId]
@@ -159,7 +161,7 @@ export class Post {
     return result.rows.map(rowToPostDB);
   }
 
-  static async findScheduledByUser(userId: number): Promise<PostDB[]> {
+  static async findScheduledByUser(userId: string): Promise<PostDB[]> {
     const result = await Database.execute(
       'SELECT * FROM Posts WHERE userId = ? AND status = "scheduled" AND scheduledAt >= datetime("now") ORDER BY scheduledAt ASC',
       [userId]
@@ -167,7 +169,7 @@ export class Post {
     return result.rows.map(rowToPostDB);
   }
 
-  static async findByDateRange(userId: number, startDate: string, endDate: string): Promise<PostDB[]> {
+  static async findByDateRange(userId: string, startDate: string, endDate: string): Promise<PostDB[]> {
     const result = await Database.execute(
       'SELECT * FROM Posts WHERE userId = ? AND scheduledAt BETWEEN ? AND ? ORDER BY scheduledAt ASC',
       [userId, startDate, endDate]
@@ -175,14 +177,14 @@ export class Post {
     return result.rows.map(rowToPostDB);
   }
 
-  static async update(id: number, data: any) {
+  static async update(id: string, data: any) {
     await Database.execute(
       'UPDATE Posts SET status = ?, publishResults = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
       [data.status, JSON.stringify(data.publishResults), id]
     );
   }
 
-  static async delete(id: number, userId: number) {
+  static async delete(id: string, userId: string) {
     const result = await Database.execute(
       'DELETE FROM Posts WHERE id = ? AND userId = ?',
       [id, userId]
@@ -193,14 +195,15 @@ export class Post {
 
 export class Campaign {
   static async create(data: any) {
-    const result = await Database.execute(
-      'INSERT INTO Campaigns (userId, name, description, startDate, endDate, status) VALUES (?, ?, ?, ?, ?, ?)',
-      [data.userId, data.name, data.description, data.startDate, data.endDate, data.status]
+    const id = generateUUID();
+    await Database.execute(
+      'INSERT INTO Campaigns (id, userId, name, description, startDate, endDate, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [id, data.userId, data.name, data.description, data.startDate, data.endDate, data.status]
     );
-    return { id: result.lastInsertRowid, ...data };
+    return { id, ...data };
   }
 
-  static async findByUser(userId: number) {
+  static async findByUser(userId: string) {
     const result = await Database.execute(
       'SELECT * FROM Campaigns WHERE userId = ? ORDER BY createdAt DESC',
       [userId]
@@ -208,12 +211,12 @@ export class Campaign {
     return result.rows;
   }
 
-  static async findById(id: number) {
+  static async findById(id: string) {
     const result = await Database.execute('SELECT * FROM Campaigns WHERE id = ?', [id]);
     return result.rows[0] || null;
   }
 
-  static async update(id: number, data: any) {
+  static async update(id: string, data: any) {
     const updates = [];
     const values = [];
     
@@ -233,7 +236,7 @@ export class Campaign {
     return await this.findById(id);
   }
 
-  static async delete(id: number, userId: number) {
+  static async delete(id: string, userId: string) {
     const result = await Database.execute(
       'DELETE FROM Campaigns WHERE id = ? AND userId = ?',
       [id, userId]
@@ -244,14 +247,15 @@ export class Campaign {
 
 export class Analytics {
   static async create(data: any) {
-    const result = await Database.execute(
-      'INSERT INTO Analytics (postId, platform, views, likes, shares, comments, engagementRate) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [data.postId, data.platform, data.views, data.likes, data.shares, data.comments, data.engagementRate]
+    const id = generateUUID();
+    await Database.execute(
+      'INSERT INTO Analytics (id, postId, platform, views, likes, shares, comments, engagementRate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, data.postId, data.platform, data.views, data.likes, data.shares, data.comments, data.engagementRate]
     );
-    return { id: result.lastInsertRowid, ...data };
+    return { id, ...data };
   }
 
-  static async findByPost(postId: number) {
+  static async findByPost(postId: string) {
     const result = await Database.execute(
       'SELECT * FROM Analytics WHERE postId = ? ORDER BY recordedAt DESC',
       [postId]
@@ -259,7 +263,7 @@ export class Analytics {
     return result.rows;
   }
 
-  static async findByCampaign(campaignId: number) {
+  static async findByCampaign(campaignId: string) {
     const result = await Database.execute(
       `SELECT a.* FROM Analytics a 
        JOIN Posts p ON a.postId = p.id 
@@ -270,7 +274,7 @@ export class Analytics {
     return result.rows;
   }
 
-  static async findByUserAndDateRange(userId: number, daysAgo: number) {
+  static async findByUserAndDateRange(userId: string, daysAgo: number) {
     const result = await Database.execute(
       `SELECT a.* FROM Analytics a 
        JOIN Posts p ON a.postId = p.id 
@@ -291,7 +295,7 @@ export class Analytics {
     return result.rows;
   }
 
-  static async update(id: number, data: any) {
+  static async update(id: string, data: any) {
     await Database.execute(
       'UPDATE Analytics SET views = ?, likes = ?, shares = ?, comments = ?, engagementRate = ? WHERE id = ?',
       [data.views, data.likes, data.shares, data.comments, data.engagementRate, id]
