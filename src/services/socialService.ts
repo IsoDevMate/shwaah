@@ -156,11 +156,11 @@ const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: 
     throw new Error('TikTok requires video content');
   }
   
-  const config = PLATFORM_CONFIGS.tiktok;
+  // Use PULL_FROM_URL method as per TikTok docs
+  const signedUrl = await getSignedUrlForFile(mediaUrl);
   
-  // Step 1: Initialize upload
   const initResponse = await axios.post(
-    `${config.baseUrl}${config.postEndpoint}`,
+    'https://open.tiktokapis.com/v2/post/publish/video/init/',
     {
       post_info: {
         title: content.substring(0, 150),
@@ -171,42 +171,19 @@ const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: 
         video_cover_timestamp_ms: 1000
       },
       source_info: {
-        source: 'FILE_UPLOAD'
+        source: 'PULL_FROM_URL',
+        video_url: signedUrl
       }
     },
     {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json; charset=UTF-8'
       }
     }
   );
   
-  const { publish_id, upload_url } = initResponse.data.data;
-  
-  // Step 2: Upload video file
-  const signedUrl = await getSignedUrlForFile(mediaUrl);
-  const videoResponse = await axios.get(signedUrl, { responseType: 'stream' });
-  
-  await axios.put(upload_url, videoResponse.data, {
-    headers: {
-      'Content-Type': 'video/mp4'
-    }
-  });
-  
-  // Step 3: Submit for publishing
-  const publishResponse = await axios.post(
-    `${config.baseUrl}/v2/post/publish/video/submit/`,
-    { publish_id },
-    {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    }
-  );
-  
-  return publishResponse.data;
+  return initResponse.data;
 };
 
 export const publishToSocial = async (
@@ -215,6 +192,10 @@ export const publishToSocial = async (
   content: string, 
   mediaUrl?: string
 ): Promise<any> => {
+  if (!accessToken) {
+    throw new Error(`No access token found for ${platform}`);
+  }
+  
   const decryptedToken = decrypt(accessToken);
   
   switch (platform) {
