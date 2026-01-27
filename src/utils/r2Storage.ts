@@ -1,4 +1,5 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import multer from 'multer';
 import multerS3 from 'multer-s3';
 import { v4 as uuidv4 } from 'uuid';
@@ -63,6 +64,19 @@ export const deleteFileFromR2 = async (fileUrl: string): Promise<void> => {
   });
   
   await s3Client.send(command);
+};
+
+// Generate signed URL for private access
+export const getSignedUrlForFile = async (fileUrl: string): Promise<string> => {
+  const key = fileUrl.split('/').pop();
+  if (!key) throw new Error('Invalid file URL');
+  
+  const command = new GetObjectCommand({
+    Bucket: process.env.R2_BUCKET_NAME!,
+    Key: key
+  });
+  
+  return await getSignedUrl(s3Client, command, { expiresIn: 3600 }); // 1 hour
 };
 
 export { s3Client };

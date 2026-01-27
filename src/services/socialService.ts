@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { decrypt, encrypt } from '../utils/crypto';
+import { getSignedUrlForFile } from '../utils/r2Storage';
 import { SocialAccount } from '../models/tursoModels';
 import { PublishResult, OAuthTokens } from '../types';
 
@@ -157,7 +158,7 @@ const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: 
   
   const config = PLATFORM_CONFIGS.tiktok;
   
-  // TikTok v2 API requires a multi-step process
+  // Step 1: Initialize upload
   const initResponse = await axios.post(
     `${config.baseUrl}${config.postEndpoint}`,
     {
@@ -170,10 +171,7 @@ const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: 
         video_cover_timestamp_ms: 1000
       },
       source_info: {
-        source: 'FILE_UPLOAD',
-        video_size: 0,
-        chunk_size: 10000000,
-        total_chunk_count: 1
+        source: 'FILE_UPLOAD'
       }
     },
     {
@@ -184,7 +182,31 @@ const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: 
     }
   );
   
-  return initResponse.data;
+  const { publish_id, upload_url } = initResponse.data.data;
+  
+  // Step 2: Upload video file
+  const signedUrl = await getSignedUrlForFile(mediaUrl);
+  const videoResponse = await axios.get(signedUrl, { responseType: 'stream' });
+  
+  await axios.put(upload_url, videoResponse.data, {
+    headers: {
+      'Content-Type': 'video/mp4'
+    }
+  });
+  
+  // Step 3: Submit for publishing
+  const publishResponse = await axios.post(
+    `${config.baseUrl}/v2/post/publish/video/submit/`,
+    { publish_id },
+    {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+  
+  return publishResponse.data;
 };
 
 export const publishToSocial = async (

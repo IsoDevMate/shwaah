@@ -49,8 +49,8 @@ router.post('/create', authenticateUser, uploadToR2.array('media', 10), async (r
       mediaUrls,
       platforms: selectedPlatforms,
       status,
-      scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
-      campaignId: campaignId || undefined
+      scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
+      campaignId: campaignId || null
     });
     
     res.json({ 
