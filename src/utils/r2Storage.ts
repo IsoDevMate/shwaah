@@ -68,15 +68,25 @@ export const deleteFileFromR2 = async (fileUrl: string): Promise<void> => {
 
 // Generate signed URL for private access
 export const getSignedUrlForFile = async (fileUrl: string): Promise<string> => {
-  const key = fileUrl.split('/').pop();
-  if (!key) throw new Error('Invalid file URL');
-  
-  const command = new GetObjectCommand({
-    Bucket: process.env.R2_BUCKET_NAME!,
-    Key: key
-  });
-  
-  return await getSignedUrl(s3Client, command, { expiresIn: 3600 }); // 1 hour
+  try {
+    console.log('[R2] Getting signed URL for:', fileUrl);
+    const key = fileUrl.split('/').pop();
+    if (!key) throw new Error('Invalid file URL - no key found');
+    
+    console.log('[R2] Extracted key:', key);
+    
+    const command = new GetObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME!,
+      Key: decodeURIComponent(key) // Decode URL-encoded characters
+    });
+    
+    const signedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+    console.log('[R2] Generated signed URL successfully');
+    return signedUrl;
+  } catch (error) {
+    console.error('[R2] Error generating signed URL:', error);
+    throw error;
+  }
 };
 
 export { s3Client };

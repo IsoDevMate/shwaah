@@ -152,8 +152,8 @@ const publishToYouTube = async (accessToken: string, content: string, mediaUrl?:
 };
 
 const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: string): Promise<any> => {
-  console.log('[TikTok] Starting publish process');
-  console.log('[TikTok] Media URL:', mediaUrl);
+  console.log('[tiktok] Starting publish process');
+  console.log('[tiktok] Has media URL:', !!mediaUrl);
   
   if (!mediaUrl) {
     throw new Error('TikTok requires video content. Please upload a video file.');
@@ -161,22 +161,27 @@ const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: 
   
   try {
     // Get video file from R2
-    console.log('[TikTok] Fetching video from R2...');
+    console.log('[tiktok] Fetching video from R2...');
     const signedUrl = await getSignedUrlForFile(mediaUrl);
-    console.log('[TikTok] Signed URL obtained');
+    console.log('[tiktok] Signed URL obtained:', signedUrl ? 'Yes' : 'No');
     
     const videoResponse = await axios.get(signedUrl, { 
       responseType: 'arraybuffer',
       maxContentLength: Infinity,
-      maxBodyLength: Infinity
+      maxBodyLength: Infinity,
+      timeout: 30000
     });
+    
+    console.log('[tiktok] Video response status:', videoResponse.status);
+    console.log('[tiktok] Video response data type:', typeof videoResponse.data);
+    console.log('[tiktok] Video response data length:', videoResponse.data?.byteLength || 'undefined');
     
     if (!videoResponse.data) {
       throw new Error('Failed to fetch video from storage. Video data is empty.');
     }
     
     const videoBuffer = Buffer.from(videoResponse.data);
-    console.log('[TikTok] Video fetched successfully, size:', videoBuffer.length, 'bytes');
+    console.log('[tiktok] Video fetched successfully, size:', videoBuffer.length, 'bytes');
     
     if (videoBuffer.length === 0) {
       throw new Error('Video file is empty');

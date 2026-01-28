@@ -30,10 +30,7 @@ router.post('/register', asyncHandler('Auth', 'Register')(async (req, res) => {
     name
   });
   
-  const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '7d' });
-  
   return sendSuccess(req, res, {
-    token,
     user: {
       id: user.id,
       email: user.email,
