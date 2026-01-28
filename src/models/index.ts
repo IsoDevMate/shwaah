@@ -52,19 +52,11 @@ export class Database {
       throw new Error('Failed to connect to Turso database');
     }
     
-    // Force drop existing tables
-    console.log('🗑️ Dropping existing tables...');
-    await this.execute('DROP TABLE IF EXISTS Analytics');
-    await this.execute('DROP TABLE IF EXISTS Campaigns');
-    await this.execute('DROP TABLE IF EXISTS Posts');
-    await this.execute('DROP TABLE IF EXISTS SocialAccounts');
-    await this.execute('DROP TABLE IF EXISTS Users');
+    console.log('🔨 Creating tables if they don\'t exist...');
     
-    console.log('🔨 Creating tables with UUID primary keys...');
-    
-    // Create tables with UUID primary keys
+    // Create tables with UUID primary keys (only if they don't exist)
     await this.execute(`
-      CREATE TABLE Users (
+      CREATE TABLE IF NOT EXISTS Users (
         id TEXT PRIMARY KEY,
         email TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
@@ -75,7 +67,7 @@ export class Database {
     `);
 
     await this.execute(`
-      CREATE TABLE SocialAccounts (
+      CREATE TABLE IF NOT EXISTS SocialAccounts (
         id TEXT PRIMARY KEY,
         userId TEXT NOT NULL,
         platform TEXT NOT NULL,
@@ -92,7 +84,7 @@ export class Database {
     `);
 
     await this.execute(`
-      CREATE TABLE Posts (
+      CREATE TABLE IF NOT EXISTS Posts (
         id TEXT PRIMARY KEY,
         userId TEXT NOT NULL,
         content TEXT NOT NULL,
@@ -109,7 +101,7 @@ export class Database {
     `);
 
     await this.execute(`
-      CREATE TABLE Campaigns (
+      CREATE TABLE IF NOT EXISTS Campaigns (
         id TEXT PRIMARY KEY,
         userId TEXT NOT NULL,
         name TEXT NOT NULL,
@@ -124,7 +116,7 @@ export class Database {
     `);
 
     await this.execute(`
-      CREATE TABLE Analytics (
+      CREATE TABLE IF NOT EXISTS Analytics (
         id TEXT PRIMARY KEY,
         postId TEXT NOT NULL,
         platform TEXT NOT NULL,
