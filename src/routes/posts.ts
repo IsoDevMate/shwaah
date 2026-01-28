@@ -4,72 +4,61 @@ import { authenticateUser } from '../middleware/auth';
 import { publishToSocial, refreshTokenIfNeeded } from '../services/socialService';
 import { AuthRequest, PublishResult } from '../types';
 import { uploadToR2 } from '../utils/r2Storage';
+import { createPostSchema } from '../schemas';
+import { asyncHandler, sendSuccess, sendError } from '../utils/routeHelpers';
 
 const router = express.Router();
 
 // Create post with multiple file uploads
-router.post('/create', authenticateUser, uploadToR2.array('media', 10), async (req: AuthRequest, res) => {
-  try {
-    const { content, platforms, scheduledAt, campaignId } = req.body;
-    const selectedPlatforms = JSON.parse(platforms);
-    const files = req.files as Express.MulterS3.File[];
-    
-    // Get media URLs from uploaded files
-    const mediaUrls = files?.map(file => file.location) || [];
-    
-    // Validate platforms
-    const validPlatforms = ['instagram', 'facebook', 'linkedin', 'youtube', 'tiktok'];
-    const invalidPlatforms = selectedPlatforms.filter((p: string) => !validPlatforms.includes(p));
-    
-    if (invalidPlatforms.length > 0) {
-      return res.status(400).json({ 
-        error: `Invalid platforms: ${invalidPlatforms.join(', ')}` 
-      });
-    }
-    
-    // Check if user has connected all selected platforms
-    const connectedAccounts = await SocialAccount.findByUserAndPlatforms(req.user!.id, selectedPlatforms);
-    
-    const connectedPlatforms = connectedAccounts.map((acc: any) => acc.platform);
-    const missingPlatforms = selectedPlatforms.filter((p: string) => !connectedPlatforms.includes(p));
-    
-    if (missingPlatforms.length > 0) {
-      return res.status(400).json({ 
-        error: `Please connect these platforms first: ${missingPlatforms.join(', ')}` 
-      });
-    }
-    
-    // Determine status based on scheduling
-    const status = scheduledAt ? 'scheduled' : 'pending';
-    
-    // Create post record
-    const post = await Post.create({
-      userId: req.user!.id,
-      content,
-      mediaUrls,
-      platforms: selectedPlatforms,
-      status,
-      scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
-      campaignId: campaignId || null
-    });
-    
-    res.json({ 
-      message: `Post ${status === 'scheduled' ? 'scheduled' : 'created'} successfully`, 
-      postId: post.id,
-      post: {
-        id: post.id,
-        content: post.content,
-        mediaUrls: post.mediaUrls,
-        platforms: post.platforms,
-        status: post.status,
-        scheduledAt: post.scheduledAt,
-        campaignId: post.campaignId
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ error: (error as Error).message });
+router.post('/create', authenticateUser, uploadToR2.array('media', 10), asyncHandler('Posts', 'Create')(async (req: AuthRequest, res) => {
+  const validation = createPostSchema.safeParse(req.body);
+  if (!validation.success) {
+    return sendError(req, res, new Error(validation.error.errors[0].message), 'Validation failed', 400, 'VALIDATION_ERROR');
   }
-});
+  
+  const { content, platforms, scheduledAt, campaignId } = validation.data;
+  const files = req.files as Express.MulterS3.File[];
+  
+  // Get media URLs from uploaded files
+  const mediaUrls = files?.map(file => file.location) || [];
+  
+  // Check if user has connected all selected platforms
+  const connectedAccounts = await SocialAccount.findByUserAndPlatforms(req.user!.id, platforms);
+  
+  const connectedPlatforms = connectedAccounts.map((acc: any) => acc.platform);
+  const missingPlatforms = platforms.filter((p: string) => !connectedPlatforms.includes(p));
+  
+  if (missingPlatforms.length > 0) {
+    return sendError(req, res, new Error(`Please connect these platforms first: ${missingPlatforms.join(', ')}`), 'Missing platforms', 400, 'MISSING_PLATFORMS');
+  }
+  
+  // Determine status based on scheduling
+  const status = scheduledAt ? 'scheduled' : 'pending';
+  
+  // Create post record
+  const post = await Post.create({
+    userId: req.user!.id,
+    content,
+    mediaUrls,
+    platforms,
+    status,
+    scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
+    campaignId: campaignId || null
+  });
+  
+  return sendSuccess(req, res, {
+    postId: post.id,
+    post: {
+      id: post.id,
+      content: post.content,
+      mediaUrls: post.mediaUrls,
+      platforms: post.platforms,
+      status: post.status,
+      scheduledAt: post.scheduledAt,
+      campaignId: post.campaignId
+    }
+  }, `Post ${status === 'scheduled' ? 'scheduled' : 'created'} successfully`, 201);
+}));
 
 // Publish post
 router.post('/publish/:postId', authenticateUser, async (req: AuthRequest, res) => {

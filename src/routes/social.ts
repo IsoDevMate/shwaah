@@ -6,6 +6,7 @@ import { encrypt, decrypt } from '../utils/crypto';
 import { AuthRequest, OAuthTokens, PlatformUserInfo } from '../types';
 import { asyncHandler, sendSuccess, sendError } from '../utils/routeHelpers';
 import { exchangeCodeForTokens, getPlatformUserInfo, exchangeForLongLivedToken } from '../services/oauthService';
+import { connectSocialSchema } from '../schemas';
 
 const router = express.Router();
 
@@ -48,12 +49,12 @@ router.get('/accounts', authenticateUser, asyncHandler('Social', 'GetAccounts')(
 
 // Initiate OAuth flow
 router.get('/connect/:platform', authenticateUser, asyncHandler('Social', 'InitiateOAuth')(async (req: AuthRequest, res) => {
-  const { platform } = req.params;
-  
-  if (!PLATFORM_SCOPES[platform]) {
+  const validation = connectSocialSchema.safeParse({ platform: req.params.platform });
+  if (!validation.success) {
     return sendError(req, res, new Error('Unsupported platform'), 'Invalid platform', 400, 'UNSUPPORTED_PLATFORM');
   }
   
+  const { platform } = validation.data;
   const authUrl = getAuthUrl(platform, req.user!.id);
   return sendSuccess(req, res, { authUrl }, 'OAuth URL generated');
 }));
@@ -126,8 +127,12 @@ router.get('/callback/:platform', asyncHandler('Social', 'OAuthCallback')(async 
 
 // Disconnect account
 router.delete('/disconnect/:platform', authenticateUser, asyncHandler('Social', 'Disconnect')(async (req: AuthRequest, res) => {
-  const { platform } = req.params;
+  const validation = connectSocialSchema.safeParse({ platform: req.params.platform });
+  if (!validation.success) {
+    return sendError(req, res, new Error('Unsupported platform'), 'Invalid platform', 400, 'UNSUPPORTED_PLATFORM');
+  }
   
+  const { platform } = validation.data;
   await SocialAccount.updateByUserAndPlatform(req.user!.id, platform, { isActive: false });
   
   return sendSuccess(req, res, null, `${platform} disconnected successfully`);

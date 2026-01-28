@@ -3,12 +3,18 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/tursoModels';
 import { asyncHandler, sendSuccess, sendError } from '../utils/routeHelpers';
+import { registerSchema, loginSchema } from '../schemas/auth';
 
 const router = express.Router();
 
 // Register
 router.post('/register', asyncHandler('Auth', 'Register')(async (req, res) => {
-  const { email, password, name } = req.body;
+  const validation = registerSchema.safeParse(req.body);
+  if (!validation.success) {
+    return sendError(req, res, new Error(validation.error.errors[0].message), 'Validation failed', 400, 'VALIDATION_ERROR');
+  }
+  
+  const { email, password, name } = validation.data;
   
   const existingUser = await User.findByEmail(email);
   if (existingUser) {
@@ -37,14 +43,19 @@ router.post('/register', asyncHandler('Auth', 'Register')(async (req, res) => {
 
 // Login
 router.post('/login', asyncHandler('Auth', 'Login')(async (req, res) => {
-  const { email, password } = req.body;
+  const validation = loginSchema.safeParse(req.body);
+  if (!validation.success) {
+    return sendError(req, res, new Error(validation.error.errors[0].message), 'Validation failed', 400, 'VALIDATION_ERROR');
+  }
+  
+  const { email, password } = validation.data;
   
   const user = await User.findByEmail(email);
   if (!user) {
     return sendError(req, res, new Error('Invalid credentials'), 'Login failed', 401, 'INVALID_CREDENTIALS');
   }
   
-  const isValidPassword = await bcrypt.compare(password, user.password as string);
+  const isValidPassword = await bcrypt.compare(password, String(user.password));
   if (!isValidPassword) {
     return sendError(req, res, new Error('Invalid credentials'), 'Login failed', 401, 'INVALID_CREDENTIALS');
   }

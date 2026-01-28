@@ -17,13 +17,13 @@ export class User {
     const id = generateUUID();
     await Database.execute(
       'INSERT INTO Users (id, email, password, name) VALUES (?, ?, ?, ?)',
-      [id, data.email, data.password, data.name]
+      [String(id), String(data.email), String(data.password), String(data.name)]
     );
     return { id, ...data };
   }
 
   static async findByEmail(email: string): Promise<AuthUser | null> {
-    const result = await Database.execute('SELECT * FROM Users WHERE email = ?', [email]);
+    const result = await Database.execute('SELECT * FROM Users WHERE email = ?', [String(email)]);
     return result.rows[0] ? rowToAuthUser(result.rows[0]) : null;
   }
 
