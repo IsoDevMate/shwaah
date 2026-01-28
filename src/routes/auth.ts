@@ -11,7 +11,8 @@ const router = express.Router();
 router.post('/register', asyncHandler('Auth', 'Register')(async (req, res) => {
   const validation = registerSchema.safeParse(req.body);
   if (!validation.success) {
-    return sendError(req, res, new Error(validation.error.errors[0].message), 'Validation failed', 400, 'VALIDATION_ERROR');
+    const errorMessage = validation.error.issues[0]?.message || 'Validation failed';
+    return sendError(req, res, new Error(errorMessage), 'Validation failed', 400, 'VALIDATION_ERROR');
   }
   
   const { email, password, name } = validation.data;
@@ -45,7 +46,8 @@ router.post('/register', asyncHandler('Auth', 'Register')(async (req, res) => {
 router.post('/login', asyncHandler('Auth', 'Login')(async (req, res) => {
   const validation = loginSchema.safeParse(req.body);
   if (!validation.success) {
-    return sendError(req, res, new Error(validation.error.errors[0].message), 'Validation failed', 400, 'VALIDATION_ERROR');
+    const errorMessage = validation.error.issues[0]?.message || 'Validation failed';
+    return sendError(req, res, new Error(errorMessage), 'Validation failed', 400, 'VALIDATION_ERROR');
   }
   
   const { email, password } = validation.data;

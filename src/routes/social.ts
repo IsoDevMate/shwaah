@@ -106,13 +106,13 @@ router.get('/callback/:platform', asyncHandler('Social', 'OAuthCallback')(async 
     
     // Save to database
     await SocialAccount.upsert({
-      userId: parseInt(userId as string),
+      userId: String(userId),
       platform: platform as any,
       platformUserId: userInfo.id,
       platformUsername: userInfo.username || userInfo.name,
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token || null,
-      expiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : undefined,
+      expiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : null,
       isActive: true
     });
     

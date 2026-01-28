@@ -11,7 +11,8 @@ const router = express.Router();
 router.post('/create', authenticateUser, asyncHandler('Campaigns', 'Create')(async (req: AuthRequest, res) => {
   const validation = createCampaignSchema.safeParse(req.body);
   if (!validation.success) {
-    return sendError(req, res, new Error(validation.error.errors[0].message), 'Validation failed', 400, 'VALIDATION_ERROR');
+    const errorMessage = validation.error.issues[0]?.message || 'Validation failed';
+    return sendError(req, res, new Error(errorMessage), 'Validation failed', 400, 'VALIDATION_ERROR');
   }
   
   const { name, description, startDate, endDate } = validation.data;
