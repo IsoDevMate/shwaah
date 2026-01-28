@@ -52,9 +52,19 @@ export class Database {
       throw new Error('Failed to connect to Turso database');
     }
     
+    // Force drop existing tables
+    console.log('🗑️ Dropping existing tables...');
+    await this.execute('DROP TABLE IF EXISTS Analytics');
+    await this.execute('DROP TABLE IF EXISTS Campaigns');
+    await this.execute('DROP TABLE IF EXISTS Posts');
+    await this.execute('DROP TABLE IF EXISTS SocialAccounts');
+    await this.execute('DROP TABLE IF EXISTS Users');
+    
+    console.log('🔨 Creating tables with UUID primary keys...');
+    
     // Create tables with UUID primary keys
     await this.execute(`
-      CREATE TABLE IF NOT EXISTS Users (
+      CREATE TABLE Users (
         id TEXT PRIMARY KEY,
         email TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
@@ -65,7 +75,7 @@ export class Database {
     `);
 
     await this.execute(`
-      CREATE TABLE IF NOT EXISTS SocialAccounts (
+      CREATE TABLE SocialAccounts (
         id TEXT PRIMARY KEY,
         userId TEXT NOT NULL,
         platform TEXT NOT NULL,
@@ -82,7 +92,7 @@ export class Database {
     `);
 
     await this.execute(`
-      CREATE TABLE IF NOT EXISTS Posts (
+      CREATE TABLE Posts (
         id TEXT PRIMARY KEY,
         userId TEXT NOT NULL,
         content TEXT NOT NULL,
@@ -99,7 +109,7 @@ export class Database {
     `);
 
     await this.execute(`
-      CREATE TABLE IF NOT EXISTS Campaigns (
+      CREATE TABLE Campaigns (
         id TEXT PRIMARY KEY,
         userId TEXT NOT NULL,
         name TEXT NOT NULL,
@@ -114,7 +124,7 @@ export class Database {
     `);
 
     await this.execute(`
-      CREATE TABLE IF NOT EXISTS Analytics (
+      CREATE TABLE Analytics (
         id TEXT PRIMARY KEY,
         postId TEXT NOT NULL,
         platform TEXT NOT NULL,
@@ -128,7 +138,7 @@ export class Database {
       )
     `);
 
-    console.log('✅ Database tables initialized');
+    console.log('✅ Database tables initialized with UUID schema');
     
     // Test R2 storage connection
     await this.testR2Connection();

@@ -6,6 +6,7 @@ import fs from 'fs';
 import { Database } from './models';
 import { requestLogger } from './utils/logger';
 import { ResponseUtil } from './utils/ResponseUtil';
+import './keepalive';
 
 // Import routes
 import authRoutes from './routes/auth';
