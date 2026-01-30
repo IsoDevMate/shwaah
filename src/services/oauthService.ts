@@ -193,7 +193,7 @@ export async function getPlatformUserInfo(platform: string, accessToken: string,
         return { id: channel.id, name: channel.snippet.title };
       case 'tiktok':
         // Already handled above in the TikTok-specific block
-        break;
+        throw new Error('TikTok user info should have been handled above');
       default:
         throw new Error(`Unsupported platform: ${platform}`);
     }

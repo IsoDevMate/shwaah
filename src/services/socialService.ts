@@ -151,6 +151,97 @@ const publishToYouTube = async (accessToken: string, content: string, mediaUrl?:
   return response.data;
 };
 
+/**
+ * Safe decrypt function that handles both encrypted and plain tokens
+ */
+function safeDecrypt(token: string): string {
+  if (!token) {
+    throw new Error('Token is empty or undefined');
+  }
+
+  try {
+    return decrypt(token);
+  } catch (error: any) {
+    console.warn('[Token] Decryption failed, using token as plain text:', error.message);
+    return token;
+  }
+}
+
+/**
+ * Validate token by making a lightweight API call
+ */
+async function validateToken(platform: string, accessToken: string): Promise<boolean> {
+  try {
+    const decryptedToken = safeDecrypt(accessToken);
+    
+    const validationEndpoints: Record<string, string> = {
+      tiktok: 'https://open.tiktokapis.com/v2/user/info/?fields=open_id'
+    };
+
+    const endpoint = validationEndpoints[platform];
+    if (!endpoint) return true;
+
+    const response = await axios.get(endpoint, {
+      headers: { 
+        'Authorization': `Bearer ${decryptedToken}`,
+        'Content-Type': 'application/json'
+      },
+      timeout: 5000
+    });
+
+    return response.status === 200;
+  } catch (error: any) {
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      return false;
+    }
+    return true;
+  }
+}
+
+/**
+ * Refresh access token for TikTok
+ */
+async function refreshTikTokToken(refreshToken: string): Promise<{ access_token: string; expires_in: number; refresh_token?: string }> {
+  const clientId = process.env.TIKTOK_CLIENT_ID;
+  const clientSecret = process.env.TIKTOK_CLIENT_SECRET;
+
+  try {
+    const decryptedRefreshToken = safeDecrypt(refreshToken);
+    
+    const response = await axios.post(
+      'https://open.tiktokapis.com/v2/oauth/token/',
+      new URLSearchParams({
+        client_key: clientId!,
+        client_secret: clientSecret!,
+        grant_type: 'refresh_token',
+        refresh_token: decryptedRefreshToken
+      }).toString(),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Cache-Control': 'no-cache'
+        }
+      }
+    );
+
+    if (response.data.data) {
+      return {
+        access_token: response.data.data.access_token,
+        expires_in: response.data.data.expires_in,
+        refresh_token: response.data.data.refresh_token
+      };
+    }
+    
+    return {
+      access_token: response.data.access_token,
+      expires_in: response.data.expires_in || 3600,
+      refresh_token: response.data.refresh_token
+    };
+  } catch (error: any) {
+    throw new Error(`Token refresh failed for TikTok: ${error.response?.data?.error_description || error.message}`);
+  }
+}
+
 const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: string): Promise<any> => {
   console.log('[tiktok] Starting publish process');
   console.log('[tiktok] Has media URL:', !!mediaUrl);
@@ -173,7 +264,6 @@ const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: 
     });
     
     console.log('[tiktok] Video response status:', videoResponse.status);
-    console.log('[tiktok] Video response data type:', typeof videoResponse.data);
     console.log('[tiktok] Video response data length:', videoResponse.data?.byteLength || 'undefined');
     
     if (!videoResponse.data) {
@@ -215,7 +305,7 @@ const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: 
       }
     );
     
-    console.log('[TikTok] Init response:', JSON.stringify(initResponse.data, null, 2));
+    console.log('[TikTok] Init response status:', initResponse.status);
     
     const { publish_id, upload_url } = initResponse.data.data;
     
@@ -243,6 +333,11 @@ const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: 
   } catch (error: any) {
     console.error('[TikTok] Publishing failed:', error.message);
     console.error('[TikTok] Error details:', error.response?.data || error);
+    
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      throw new Error('TikTok authentication failed - token may be expired. Please reconnect your TikTok account.');
+    }
+    
     throw new Error(`TikTok publishing failed: ${error.response?.data?.error?.message || error.message}`);
   }
 };
@@ -260,7 +355,7 @@ export const publishToSocial = async (
     throw new Error(`No access token found for ${platform}`);
   }
   
-  const decryptedToken = decrypt(accessToken);
+  const decryptedToken = safeDecrypt(accessToken);
   
   try {
     let result;
@@ -295,41 +390,84 @@ export const publishToSocial = async (
 };
 
 export const refreshTokenIfNeeded = async (socialAccount: any): Promise<any> => {
-  if (!socialAccount.expiresAt || new Date() < new Date(socialAccount.expiresAt)) {
-    return socialAccount;
+  const platform = socialAccount.platform;
+  console.log(`\n[Token Management] Checking token for ${platform}...`);
+  
+  // Check if token is expired or about to expire (within 1 hour)
+  const isExpired = socialAccount.expiresAt && 
+    new Date(socialAccount.expiresAt).getTime() - Date.now() < 3600000;
+
+  if (isExpired) {
+    console.log(`[Token Management] ${platform} token is expired or expiring soon`);
+  } else {
+    console.log(`[Token Management] ${platform} token expiry:`, socialAccount.expiresAt || 'No expiry set');
   }
-  
-  const refreshEndpoints: Record<string, string> = {
-    instagram: 'https://graph.instagram.com/refresh_access_token',
-    facebook: 'https://graph.facebook.com/oauth/access_token',
-    linkedin: 'https://www.linkedin.com/oauth/v2/accessToken',
-    youtube: 'https://oauth2.googleapis.com/token',
-    tiktok: 'https://open-api.tiktok.com/oauth/refresh_token/'
-  };
-  
-  const endpoint = refreshEndpoints[socialAccount.platform];
-  if (!endpoint) return socialAccount;
-  
-  try {
-    const response = await axios.post(endpoint, {
-      grant_type: 'refresh_token',
-      refresh_token: decrypt(socialAccount.refreshToken!),
-      client_id: process.env[`${socialAccount.platform.toUpperCase()}_CLIENT_ID`],
-      client_secret: process.env[`${socialAccount.platform.toUpperCase()}_CLIENT_SECRET`]
-    });
+
+  // If token is expired and we have a refresh token, try to refresh
+  if (isExpired && socialAccount.refreshToken && platform === 'tiktok') {
+    console.log(`[Token Management] Attempting to refresh ${platform} token...`);
     
-    const { access_token, expires_in } = response.data;
-    
-    // Update in database using Turso models
-    const { SocialAccount } = await import('../models/tursoModels');
-    const updatedAccount = await SocialAccount.update(socialAccount.id, {
-      accessToken: encrypt(access_token),
-      expiresAt: new Date(Date.now() + expires_in * 1000).toISOString()
-    });
-    
-    return updatedAccount;
-  } catch (error) {
-    console.error(`Failed to refresh token for ${socialAccount.platform}:`, (error as Error).message);
-    return socialAccount;
+    try {
+      const newTokens = await refreshTikTokToken(socialAccount.refreshToken);
+      
+      const updatedAccount = await SocialAccount.update(socialAccount.id, {
+        accessToken: encrypt(newTokens.access_token),
+        refreshToken: newTokens.refresh_token ? encrypt(newTokens.refresh_token) : socialAccount.refreshToken,
+        expiresAt: new Date(Date.now() + newTokens.expires_in * 1000).toISOString()
+      });
+      
+      console.log(`[Token Management] ${platform} token refreshed successfully`);
+      return updatedAccount;
+    } catch (error: any) {
+      console.error(`[Token Management] Failed to refresh ${platform} token:`, error.message);
+      
+      // If refresh fails, validate the existing token
+      console.log(`[Token Management] Validating existing ${platform} token...`);
+      const isValid = await validateToken(platform, socialAccount.accessToken);
+      
+      if (!isValid) {
+        throw new Error(
+          `${platform} token is invalid and refresh failed. Please reconnect your ${platform} account.`
+        );
+      }
+      
+      console.log(`[Token Management] Existing ${platform} token is still valid`);
+      return socialAccount;
+    }
   }
+
+  // Token not expired - validate it's still working for TikTok
+  if (platform === 'tiktok') {
+    console.log(`[Token Management] Validating ${platform} token...`);
+    const isValid = await validateToken(platform, socialAccount.accessToken);
+    
+    if (!isValid && socialAccount.refreshToken) {
+      console.log(`[Token Management] ${platform} token invalid, attempting refresh...`);
+      
+      try {
+        const newTokens = await refreshTikTokToken(socialAccount.refreshToken);
+        
+        const updatedAccount = await SocialAccount.update(socialAccount.id, {
+          accessToken: encrypt(newTokens.access_token),
+          refreshToken: newTokens.refresh_token ? encrypt(newTokens.refresh_token) : socialAccount.refreshToken,
+          expiresAt: new Date(Date.now() + newTokens.expires_in * 1000).toISOString()
+        });
+        
+        console.log(`[Token Management] ${platform} token refreshed after validation failure`);
+        return updatedAccount;
+      } catch (error: any) {
+        throw new Error(
+          `${platform} token is invalid and refresh failed. Please reconnect your ${platform} account.`
+        );
+      }
+    } else if (!isValid) {
+      throw new Error(
+        `${platform} token is invalid and no refresh token available. Please reconnect your ${platform} account.`
+      );
+    }
+
+    console.log(`[Token Management] ${platform} token is valid`);
+  }
+
+  return socialAccount;
 };
