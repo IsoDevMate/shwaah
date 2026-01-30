@@ -33,7 +33,8 @@ const PLATFORM_CONFIGS: Record<string, PlatformConfig> = {
   },
   tiktok: {
     baseUrl: 'https://open.tiktokapis.com',
-    postEndpoint: '/v2/post/publish/video/init/',
+    // Use INBOX endpoint (requires video.upload scope)
+    postEndpoint: '/v2/post/publish/inbox/video/init/',
     userEndpoint: '/v2/user/info/'
   }
 };
@@ -277,19 +278,11 @@ const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: 
       throw new Error('Video file is empty');
     }
     
-    // Step 1: Initialize upload
-    console.log('[TikTok] Initializing upload...');
+    // Step 1: Initialize INBOX upload (uses video.upload scope)
+    console.log('[TikTok] Initializing INBOX upload...');
     const initResponse = await axios.post(
-      'https://open.tiktokapis.com/v2/post/publish/video/init/',
+      'https://open.tiktokapis.com/v2/post/publish/inbox/video/init/',
       {
-        post_info: {
-          title: content.substring(0, 150),
-          privacy_level: 'PUBLIC_TO_EVERYONE',
-          disable_duet: false,
-          disable_comment: false,
-          disable_stitch: false,
-          video_cover_timestamp_ms: 1000
-        },
         source_info: {
           source: 'FILE_UPLOAD',
           video_size: videoBuffer.length,
@@ -327,9 +320,14 @@ const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: 
       maxBodyLength: Infinity
     });
     
-    console.log('[TikTok] Video uploaded successfully');
+    console.log('[TikTok] Video uploaded successfully to inbox!');
+    console.log('[TikTok] User will receive notification in TikTok app to review and post');
     
-    return { publish_id, status: 'Processing', message: 'Video uploaded successfully and is being processed by TikTok' };
+    return { 
+      publish_id, 
+      status: 'Uploaded to Inbox', 
+      message: `Video uploaded to TikTok inbox successfully! User needs to open TikTok app to review and post the video. Title suggestion: "${content.substring(0, 100)}"`
+    };
   } catch (error: any) {
     console.error('[TikTok] Publishing failed:', error.message);
     console.error('[TikTok] Error details:', error.response?.data || error);
