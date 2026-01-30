@@ -15,7 +15,7 @@ const PLATFORM_SCOPES: Record<string, string> = {
   facebook: 'pages_manage_posts,pages_read_engagement,publish_to_groups',
   linkedin: 'openid,email,profile,w_member_social',
   youtube: 'https://www.googleapis.com/auth/youtube.upload',
-  tiktok: 'user.info.basic,video.upload,video.publish'
+  tiktok: 'user.info.basic,user.info.profile,user.info.stats,video.upload,video.list'
 };
 
 const getAuthUrl = (platform: string, userId: number): string => {
@@ -35,7 +35,7 @@ const getAuthUrl = (platform: string, userId: number): string => {
     facebook: `https://www.facebook.com/v18.0/dialog/oauth?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scopes}&response_type=code&state=${userId}`,
     linkedin: `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scopes}&state=${userId}`,
     youtube: `https://accounts.google.com/o/oauth2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scopes}&response_type=code&access_type=offline&state=${userId}`,
-    tiktok: `https://www.tiktok.com/v2/auth/authorize/?client_key=${clientId}&scope=${scopes}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&state=${userId}`
+    tiktok: `https://www.tiktok.com/v2/auth/authorize/?client_key=${clientId}&scope=${encodeURIComponent(scopes)}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&state=${userId}`
   };
   
   return authUrls[platform];
