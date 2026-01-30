@@ -252,17 +252,42 @@ const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: 
   }
   
   try {
-    // Get video file from R2
+    // Get video file from R2 with retry logic
     console.log('[tiktok] Fetching video from R2...');
     const signedUrl = await getSignedUrlForFile(mediaUrl);
     console.log('[tiktok] Signed URL obtained:', signedUrl ? 'Yes' : 'No');
     
-    const videoResponse = await axios.get(signedUrl, { 
-      responseType: 'arraybuffer',
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity,
-      timeout: 30000
-    });
+    let videoResponse;
+    let retries = 3;
+    
+    while (retries > 0) {
+      try {
+        videoResponse = await axios.get(signedUrl, { 
+          responseType: 'arraybuffer',
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity,
+          timeout: 60000, // Increased timeout to 60 seconds
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; TikTokUploader/1.0)'
+          }
+        });
+        break; // Success, exit retry loop
+      } catch (fetchError: any) {
+        retries--;
+        console.warn(`[tiktok] Video fetch attempt failed (${3 - retries}/3):`, fetchError.code || fetchError.message);
+        
+        if (retries === 0) {
+          throw new Error(`Failed to fetch video from R2 storage after 3 attempts: ${fetchError.code || fetchError.message}`);
+        }
+        
+        // Wait 2 seconds before retry
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+    
+    if (!videoResponse) {
+      throw new Error('Failed to fetch video from R2 storage - no response received');
+    }
     
     console.log('[tiktok] Video response status:', videoResponse.status);
     console.log('[tiktok] Video response data length:', videoResponse.data?.byteLength || 'undefined');
@@ -330,7 +355,20 @@ const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: 
     };
   } catch (error: any) {
     console.error('[TikTok] Publishing failed:', error.message);
-    console.error('[TikTok] Error details:', error.response?.data || error);
+    console.error('[TikTok] Error details:', error.response?.data || error.code || error);
+    
+    // Check for network/timeout errors
+    if (error.code === 'ETIMEDOUT' || error.code === 'ENETUNREACH') {
+      throw new Error('Network timeout: Unable to connect to video storage or TikTok servers. Please try again in a few minutes.');
+    }
+    
+    // Check for scope error
+    if (error.response?.data?.error?.code === 'scope_not_authorized') {
+      throw new Error(
+        'TikTok scope error: Your account needs to reconnect with proper permissions. ' +
+        'Current method requires "video.upload" scope. Please disconnect and reconnect your TikTok account.'
+      );
+    }
     
     if (error.response?.status === 401 || error.response?.status === 403) {
       throw new Error('TikTok authentication failed - token may be expired. Please reconnect your TikTok account.');
