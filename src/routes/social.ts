@@ -15,7 +15,7 @@ const PLATFORM_SCOPES: Record<string, string> = {
   facebook: 'pages_manage_posts,pages_read_engagement,publish_to_groups',
   linkedin: 'openid,email,profile,w_member_social',
   youtube: 'https://www.googleapis.com/auth/youtube.upload',
-  tiktok: 'user.info.basic,video.list,video.upload'
+  tiktok: 'user.info.basic,video.upload,video.publish'
 };
 
 const getAuthUrl = (platform: string, userId: number): string => {
@@ -136,6 +136,26 @@ router.delete('/disconnect/:platform', authenticateUser, asyncHandler('Social', 
   await SocialAccount.updateByUserAndPlatform(req.user!.id, platform, { isActive: false });
   
   return sendSuccess(req, res, null, `${platform} disconnected successfully`);
+}));
+
+// Force reconnect (disconnect and get new auth URL)
+router.post('/reconnect/:platform', authenticateUser, asyncHandler('Social', 'Reconnect')(async (req: AuthRequest, res) => {
+  const validation = connectSocialSchema.safeParse({ platform: req.params.platform });
+  if (!validation.success) {
+    return sendError(req, res, new Error('Unsupported platform'), 'Invalid platform', 400, 'UNSUPPORTED_PLATFORM');
+  }
+  
+  const { platform } = validation.data;
+  
+  // Disconnect existing account
+  await SocialAccount.updateByUserAndPlatform(req.user!.id, platform, { isActive: false });
+  
+  // Generate new auth URL
+  const authUrl = getAuthUrl(platform, req.user!.id);
+  
+  console.log(`[Social] ${platform} marked for reconnection for user ${req.user!.id}`);
+  
+  return sendSuccess(req, res, { authUrl }, `${platform} disconnected. Use the authUrl to reconnect with proper permissions.`);
 }));
 
 export default router;
