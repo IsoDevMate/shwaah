@@ -14,29 +14,73 @@ router.post('/create', authenticateUser, uploadToR2.array('media', 10), asyncHan
   const validation = createPostSchema.safeParse(req.body);
   if (!validation.success) {
     const errorMessage = validation.error.issues[0]?.message || 'Validation failed';
-    return sendError(req, res, new Error(errorMessage), 'Validation failed', 400, 'VALIDATION_ERROR');
+    return sendError(req, res, new Error(errorMessage), errorMessage, 400, 'VALIDATION_ERROR');
   }
   
   const { content, platforms, scheduledAt, campaignId } = validation.data;
   const files = req.files as Express.MulterS3.File[];
   
-  // Get media URLs from uploaded files
   const mediaUrls = files?.map(file => file.location) || [];
   
-  // Check if user has connected all selected platforms
   const connectedAccounts = await SocialAccount.findByUserAndPlatforms(req.user!.id, platforms);
   
   const connectedPlatforms = connectedAccounts.map((acc: any) => acc.platform);
   const missingPlatforms = platforms.filter((p: string) => !connectedPlatforms.includes(p));
   
   if (missingPlatforms.length > 0) {
-    return sendError(req, res, new Error(`Please connect these platforms first: ${missingPlatforms.join(', ')}`), 'Missing platforms', 400, 'MISSING_PLATFORMS');
+    return sendError(
+      req, 
+      res, 
+      new Error(`Please connect these platforms first: ${missingPlatforms.join(', ')}`), 
+      `Missing platforms: ${missingPlatforms.join(', ')}`, 
+      400, 
+      'MISSING_PLATFORMS'
+    );
   }
   
-  // Determine status based on scheduling
+  // Server-side validation for scheduledAt
+  if (scheduledAt) {
+    const scheduledDate = new Date(scheduledAt);
+    const now = new Date();
+    const minScheduleTime = new Date(now.getTime() + 5 * 60 * 1000);
+    
+    if (isNaN(scheduledDate.getTime())) {
+      return sendError(
+        req,
+        res,
+        new Error('Invalid date format'),
+        'The scheduled date is invalid',
+        400,
+        'INVALID_DATE'
+      );
+    }
+    
+    if (scheduledDate < minScheduleTime) {
+      return sendError(
+        req,
+        res,
+        new Error('Schedule time too soon'),
+        `Posts must be scheduled at least 5 minutes in the future. Please schedule for ${minScheduleTime.toISOString()} or later.`,
+        400,
+        'SCHEDULE_TOO_SOON'
+      );
+    }
+    
+    const oneYearFromNow = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
+    if (scheduledDate > oneYearFromNow) {
+      return sendError(
+        req,
+        res,
+        new Error('Schedule time too far'),
+        'Posts cannot be scheduled more than 1 year in advance',
+        400,
+        'SCHEDULE_TOO_FAR'
+      );
+    }
+  }
+  
   const status = scheduledAt ? 'scheduled' : 'pending';
   
-  // Create post record
   const post = await Post.create({
     userId: req.user!.id,
     content,
@@ -46,6 +90,8 @@ router.post('/create', authenticateUser, uploadToR2.array('media', 10), asyncHan
     scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
     campaignId: campaignId || null
   });
+  
+  console.log(`[Posts] Created post ${post.id} with status: ${status}${scheduledAt ? ` for ${scheduledAt}` : ''}`);
   
   return sendSuccess(req, res, {
     postId: post.id,
@@ -57,7 +103,10 @@ router.post('/create', authenticateUser, uploadToR2.array('media', 10), asyncHan
       status: post.status,
       scheduledAt: post.scheduledAt,
       campaignId: post.campaignId
-    }
+    },
+    message: status === 'scheduled' 
+      ? `Post scheduled for ${new Date(scheduledAt!).toLocaleString()}`
+      : 'Post created successfully'
   }, `Post ${status === 'scheduled' ? 'scheduled' : 'created'} successfully`, 201);
 }));
 

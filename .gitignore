@@ -5,3 +5,5 @@ uploads/
 .env
 .DS_Store
 *logs 
+
+*sqlite*

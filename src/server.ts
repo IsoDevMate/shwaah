@@ -18,6 +18,7 @@ import analyticsRoutes from './routes/analytics';
 // Import scheduler
 import './services/schedulerService';
 import './services/logBackupService';
+import { getSchedulerHealth } from './services/schedulerService';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -58,6 +59,12 @@ app.get('/api/health', (req, res) => {
     memory: process.memoryUsage(),
     timestamp: new Date().toISOString() 
   }, 'Service is healthy');
+});
+
+// Scheduler health check
+app.get('/api/scheduler/health', (req, res) => {
+  const health = getSchedulerHealth();
+  return ResponseUtil.success(res, 200, health, 'Scheduler health retrieved');
 });
 
 // Error handling middleware

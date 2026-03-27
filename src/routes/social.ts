@@ -62,13 +62,12 @@ router.get('/connect/:platform', authenticateUser, asyncHandler('Social', 'Initi
 // OAuth callback
 router.get('/callback/:platform', asyncHandler('Social', 'OAuthCallback')(async (req, res) => {
   const { platform } = req.params;
-  const { code, state: userId, error, error_description } = req.query;
-  
-  // Remove verbose logging
-  
-  if (error) {
-    console.error(`OAuth error from ${platform}:`, error, error_description);
-    return sendError(req, res, new Error(`OAuth error: ${error_description || error}`), 'OAuth authorization failed', 400, 'OAUTH_ERROR');
+  const { code, state: userId, error, error_code, error_message, error_description } = req.query;
+
+  if (error || error_code) {
+    const msg = error_description || error_message || error;
+    console.error(`OAuth error from ${platform}:`, msg);
+    return sendError(req, res, new Error(`OAuth error: ${msg}`), 'OAuth authorization failed', 400, 'OAUTH_ERROR');
   }
   
   if (!code || !userId) {
