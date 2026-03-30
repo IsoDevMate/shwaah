@@ -156,6 +156,7 @@ router.post('/publish/:postId', authenticateUser, async (req: AuthRequest, res) 
         
         // Get the first media URL (or undefined if no media)
         const mediaUrl = post.mediaUrls && post.mediaUrls.length > 0 ? post.mediaUrls[0] : undefined;
+        const mediaUrls = post.mediaUrls || [];
         
         console.log(`[Publish] ${account.platform} - Media URL:`, mediaUrl);
         
@@ -164,7 +165,8 @@ router.post('/publish/:postId', authenticateUser, async (req: AuthRequest, res) 
           account.platform, 
           refreshedAccount.accessToken, 
           post.content, 
-          mediaUrl
+          mediaUrl,
+          mediaUrls
         );
         
         publishResults[account.platform] = {

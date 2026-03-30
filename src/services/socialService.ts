@@ -1,8 +1,6 @@
 import axios from 'axios';
 import { decrypt, encrypt } from '../utils/crypto';
-import { getSignedUrlForFile } from '../utils/r2Storage';
 import { SocialAccount } from '../models/tursoModels';
-import { PublishResult, OAuthTokens } from '../types';
 
 interface PlatformConfig {
   baseUrl: string;
@@ -41,7 +39,7 @@ const PLATFORM_CONFIGS: Record<string, PlatformConfig> = {
 
 const isVideo = (url: string) => /\.(mp4|mov|avi|mkv|webm)(\?|$)/i.test(url);
 
-const publishToInstagram = async (accessToken: string, content: string, mediaUrl?: string): Promise<any> => {
+const publishToInstagram = async (accessToken: string, content: string, mediaUrl?: string, mediaUrls?: string[]): Promise<any> => {
   const config = PLATFORM_CONFIGS.instagram;
   
   if (!mediaUrl) {
@@ -49,7 +47,55 @@ const publishToInstagram = async (accessToken: string, content: string, mediaUrl
   }
 
   try {
+    const allUrls = mediaUrls && mediaUrls.length > 1 ? mediaUrls : [mediaUrl];
     const mediaIsVideo = isVideo(mediaUrl);
+
+    // Carousel post (multiple images)
+    if (allUrls.length > 1) {
+      console.log(`[Instagram] Creating carousel with ${allUrls.length} items`);
+      
+      // Create a container for each image
+      const containerIds = await Promise.all(allUrls.map(async (url) => {
+        const isVid = isVideo(url);
+        const params: any = { access_token: accessToken, is_carousel_item: true };
+        if (isVid) { params.media_type = 'VIDEO'; params.video_url = url; }
+        else { params.image_url = url; }
+        const res = await axios.post(`${config.baseUrl}${config.postEndpoint}`, params);
+        return res.data.id;
+      }));
+
+      console.log('[Instagram] Carousel item containers:', containerIds);
+
+      // Create carousel container
+      const carouselRes = await axios.post(`${config.baseUrl}${config.postEndpoint}`, {
+        media_type: 'CAROUSEL',
+        children: containerIds.join(','),
+        caption: content,
+        access_token: accessToken
+      });
+
+      const carouselId = carouselRes.data.id;
+
+      // Poll until ready
+      let status = 'IN_PROGRESS';
+      let attempts = 0;
+      while (status === 'IN_PROGRESS' && attempts < 15) {
+        await new Promise(r => setTimeout(r, 3000));
+        const statusRes = await axios.get(`${config.baseUrl}/${carouselId}`, {
+          params: { fields: 'status_code', access_token: accessToken }
+        });
+        status = statusRes.data.status_code;
+        attempts++;
+        console.log(`[Instagram] Carousel status: ${status} (attempt ${attempts})`);
+      }
+
+      const publishResponse = await axios.post(`${config.baseUrl}/me/media_publish`, {
+        creation_id: carouselId,
+        access_token: accessToken
+      });
+
+      return publishResponse.data;
+    }
     console.log('[Instagram] Creating media container with:', { mediaUrl, isVideo: mediaIsVideo, caption: content });
 
     // Build container params based on media type
@@ -358,114 +404,80 @@ const publishTikTokPhoto = async (accessToken: string, content: string, mediaUrl
 };
 
 const publishTikTokVideo = async (accessToken: string, content: string, mediaUrl: string): Promise<any> => {
-    // Get video file from R2 with retry logic
-    console.log('[tiktok] Fetching video from R2...');
-    const signedUrl = await getSignedUrlForFile(mediaUrl);
-    console.log('[tiktok] Signed URL obtained:', signedUrl ? 'Yes' : 'No');
-    
-    let videoResponse;
-    let retries = 3;
-    
-    while (retries > 0) {
-      try {
-        videoResponse = await axios.get(signedUrl, { 
-          responseType: 'arraybuffer',
-          maxContentLength: Infinity,
-          maxBodyLength: Infinity,
-          timeout: 60000, // Increased timeout to 60 seconds
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; TikTokUploader/1.0)'
-          }
-        });
-        break; // Success, exit retry loop
-      } catch (fetchError: any) {
-        retries--;
-        console.warn(`[tiktok] Video fetch attempt failed (${3 - retries}/3):`, fetchError.code || fetchError.message);
-        
-        if (retries === 0) {
-          throw new Error(`Failed to fetch video from R2 storage after 3 attempts: ${fetchError.code || fetchError.message}`);
-        }
-        
-        // Wait 2 seconds before retry
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
+  console.log('[tiktok] Fetching video from R2...');
+
+  // Alternative: PULL_FROM_URL (requires verified domain in TikTok dashboard)
+  // const baseUrl = process.env.RENDER_EXTERNAL_URL || 'https://shwaah-8n4g.onrender.com';
+  // const proxiedUrl = `${baseUrl}/api/media/proxy?url=${encodeURIComponent(mediaUrl)}`;
+  // const response = await axios.post('https://open.tiktokapis.com/v2/post/publish/inbox/video/init/',
+  //   { source_info: { source: 'PULL_FROM_URL', video_url: proxiedUrl } },
+  //   { headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json; charset=UTF-8' } }
+  // );
+  // return { publish_id: response.data.data.publish_id, status: 'Uploaded to Inbox', message: '...' };
+
+  const { getSignedUrlForFile } = await import('../utils/r2Storage');
+  const signedUrl = await getSignedUrlForFile(mediaUrl);
+  console.log('[tiktok] Signed URL obtained:', signedUrl ? 'Yes' : 'No');
+
+  let videoResponse;
+  let retries = 3;
+  while (retries > 0) {
+    try {
+      videoResponse = await axios.get(signedUrl, {
+        responseType: 'arraybuffer',
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+        timeout: 60000,
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TikTokUploader/1.0)' }
+      });
+      break;
+    } catch (fetchError: any) {
+      retries--;
+      console.warn(`[tiktok] Video fetch attempt failed (${3 - retries}/3):`, fetchError.code || fetchError.message);
+      if (retries === 0) throw new Error(`Failed to fetch video from R2 after 3 attempts: ${fetchError.code || fetchError.message}`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
     }
-    
-    if (!videoResponse) {
-      throw new Error('Failed to fetch video from R2 storage - no response received');
-    }
-    
-    console.log('[tiktok] Video response status:', videoResponse.status);
-    console.log('[tiktok] Video response data length:', videoResponse.data?.byteLength || 'undefined');
-    
-    if (!videoResponse.data) {
-      throw new Error('Failed to fetch video from storage. Video data is empty.');
-    }
-    
-    const videoBuffer = Buffer.from(videoResponse.data);
-    console.log('[tiktok] Video fetched successfully, size:', videoBuffer.length, 'bytes');
-    
-    if (videoBuffer.length === 0) {
-      throw new Error('Video file is empty');
-    }
-    
-    // Step 1: Initialize INBOX upload (uses video.upload scope)
-    console.log('[TikTok] Initializing INBOX upload...');
-    const initResponse = await axios.post(
-      'https://open.tiktokapis.com/v2/post/publish/inbox/video/init/',
-      {
-        source_info: {
-          source: 'FILE_UPLOAD',
-          video_size: videoBuffer.length,
-          chunk_size: videoBuffer.length,
-          total_chunk_count: 1
-        }
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json; charset=UTF-8'
-        }
-      }
-    );
-    
-    console.log('[TikTok] Init response status:', initResponse.status);
-    
-    const { publish_id, upload_url } = initResponse.data.data;
-    
-    if (!upload_url) {
-      throw new Error('TikTok did not return an upload URL');
-    }
-    
-    console.log('[TikTok] Got publish_id:', publish_id);
-    
-    // Step 2: Upload video file
-    console.log('[TikTok] Uploading video to TikTok...');
-    await axios.put(upload_url, videoBuffer, {
-      headers: {
-        'Content-Type': 'video/mp4',
-        'Content-Length': videoBuffer.length.toString(),
-        'Content-Range': `bytes 0-${videoBuffer.length - 1}/${videoBuffer.length}`
-      },
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity
-    });
-    
-    console.log('[TikTok] Video uploaded successfully to inbox!');
-    console.log('[TikTok] User will receive notification in TikTok app to review and post');
-    
-    return { 
-      publish_id, 
-      status: 'Uploaded to Inbox', 
-      message: `Video uploaded to TikTok inbox successfully! User needs to open TikTok app to review and post the video. Title suggestion: "${content.substring(0, 100)}"`
-    };
+  }
+
+  const videoBuffer = Buffer.from(videoResponse!.data);
+  console.log('[tiktok] Video fetched successfully, size:', videoBuffer.length, 'bytes');
+  if (videoBuffer.length === 0) throw new Error('Video file is empty');
+
+  console.log('[TikTok] Initializing INBOX upload...');
+  const initResponse = await axios.post(
+    'https://open.tiktokapis.com/v2/post/publish/inbox/video/init/',
+    { source_info: { source: 'FILE_UPLOAD', video_size: videoBuffer.length, chunk_size: videoBuffer.length, total_chunk_count: 1 } },
+    { headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json; charset=UTF-8' } }
+  );
+
+  const { publish_id, upload_url } = initResponse.data.data;
+  if (!upload_url) throw new Error('TikTok did not return an upload URL');
+
+  console.log('[TikTok] Uploading video to TikTok...');
+  await axios.put(upload_url, videoBuffer, {
+    headers: {
+      'Content-Type': 'video/mp4',
+      'Content-Length': videoBuffer.length.toString(),
+      'Content-Range': `bytes 0-${videoBuffer.length - 1}/${videoBuffer.length}`
+    },
+    maxContentLength: Infinity,
+    maxBodyLength: Infinity
+  });
+
+  console.log('[TikTok] Video uploaded successfully to inbox!');
+  return {
+    publish_id,
+    status: 'Uploaded to Inbox',
+    message: `Video uploaded to TikTok inbox successfully! User needs to open TikTok app to review and post the video. Title suggestion: "${content.substring(0, 100)}"`
+  };
 };
 
 export const publishToSocial = async (
   platform: string, 
   accessToken: string, 
   content: string, 
-  mediaUrl?: string
+  mediaUrl?: string,
+  mediaUrls?: string[]
 ): Promise<any> => {
   console.log(`\n[${platform}] Starting publish process`);
   console.log(`[${platform}] Has media URL:`, !!mediaUrl);
@@ -481,7 +493,7 @@ export const publishToSocial = async (
     
     switch (platform) {
       case 'instagram':
-        result = await publishToInstagram(decryptedToken, content, mediaUrl);
+        result = await publishToInstagram(decryptedToken, content, mediaUrl, mediaUrls);
         break;
       case 'facebook':
         result = await publishToFacebook(decryptedToken, content, mediaUrl);
