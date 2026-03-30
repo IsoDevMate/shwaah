@@ -320,6 +320,11 @@ const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: 
 const publishTikTokPhoto = async (accessToken: string, content: string, mediaUrl: string): Promise<any> => {
   console.log('[TikTok] Publishing photo via MEDIA_UPLOAD...');
   
+  // Proxy through our own domain so TikTok can verify URL ownership
+  const baseUrl = process.env.RENDER_EXTERNAL_URL || `https://shwaah-8n4g.onrender.com`;
+  const proxiedUrl = `${baseUrl}/api/media/proxy?url=${encodeURIComponent(mediaUrl)}`;
+  console.log('[TikTok] Using proxied URL:', proxiedUrl);
+  
   const response = await axios.post(
     'https://open.tiktokapis.com/v2/post/publish/content/init/',
     {
@@ -330,7 +335,7 @@ const publishTikTokPhoto = async (accessToken: string, content: string, mediaUrl
       source_info: {
         source: 'PULL_FROM_URL',
         photo_cover_index: 0,
-        photo_images: [mediaUrl]
+        photo_images: [proxiedUrl]
       },
       post_mode: 'MEDIA_UPLOAD',
       media_type: 'PHOTO'

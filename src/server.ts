@@ -53,6 +53,27 @@ app.use('/api/campaigns', campaignsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
+// TikTok domain verification file
+app.get('/tiktok05xz8pArp9G3euBN7jvNzR9SwapksMVu.txt', (req, res) => {
+  res.sendFile(path.join(__dirname, '../tiktok05xz8pArp9G3euBN7jvNzR9SwapksMVu.txt'));
+});
+
+// Media proxy for TikTok photo uploads (TikTok requires verified domain for PULL_FROM_URL)
+app.get('/api/media/proxy', async (req, res) => {
+  const url = req.query.url as string;
+  if (!url || !url.startsWith('https://pub-')) {
+    return res.status(400).send('Invalid URL');
+  }
+  try {
+    const axios = (await import('axios')).default;
+    const response = await axios.get(url, { responseType: 'stream' });
+    res.setHeader('Content-Type', response.headers['content-type'] || 'image/png');
+    response.data.pipe(res);
+  } catch {
+    res.status(500).send('Failed to fetch media');
+  }
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   return ResponseUtil.success(res, 200, { 
