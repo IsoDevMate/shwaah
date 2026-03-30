@@ -8,13 +8,13 @@ export async function exchangeCodeForTokens(platform: string, code: string): Pro
   
   // Use hardcoded redirect URI for TikTok to ensure consistency
   const redirectUri = platform === 'tiktok' 
-    ? 'https://shwaah.onrender.com/api/social/callback/tiktok'
+    ? 'https://shwaah-8n4g.onrender.com/api/social/callback/tiktok'
     : process.env[`${platform.toUpperCase()}_REDIRECT_URI`] || `${process.env.REDIRECT_URI}/${platform}`;
 
   // Remove verbose logging
 
   const tokenUrls: Record<string, string> = {
-    instagram: 'https://graph.facebook.com/v19.0/oauth/access_token', // Use Facebook Graph API for Instagram Business
+    instagram: 'https://api.instagram.com/oauth/access_token',
     facebook: 'https://graph.facebook.com/v18.0/oauth/access_token',
     linkedin: 'https://www.linkedin.com/oauth/v2/accessToken',
     youtube: 'https://oauth2.googleapis.com/token',
@@ -63,9 +63,10 @@ export async function exchangeCodeForTokens(platform: string, code: string): Pro
     let response;
     
     if (platform === 'instagram') {
-      response = await axios.get(tokenUrls[platform], {
-        params: tokenData[platform]
-      });
+      response = await axios.post(tokenUrls[platform],
+        new URLSearchParams(tokenData[platform]).toString(),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+      );
     } else if (platform === 'tiktok') {
       console.log('TikTok token request data:', tokenData[platform]);
       response = await axios.post(tokenUrls[platform], 
@@ -209,12 +210,11 @@ export async function exchangeForLongLivedToken(shortLivedToken: string): Promis
   try {
     // Remove verbose logging
     
-    const response = await axios.get('https://graph.facebook.com/v19.0/oauth/access_token', {
+    const response = await axios.get('https://graph.instagram.com/access_token', {
       params: {
-        grant_type: 'fb_exchange_token',
-        client_id: process.env.INSTAGRAM_CLIENT_ID,
+        grant_type: 'ig_exchange_token',
         client_secret: process.env.INSTAGRAM_CLIENT_SECRET,
-        fb_exchange_token: shortLivedToken
+        access_token: shortLivedToken
       }
     });
     

@@ -11,7 +11,7 @@ import { connectSocialSchema } from '../schemas';
 const router = express.Router();
 
 const PLATFORM_SCOPES: Record<string, string> = {
-  instagram: 'instagram_basic,instagram_content_publish,pages_read_engagement,pages_show_list,business_management',
+  instagram: 'instagram_business_basic,instagram_business_content_publish',
   facebook: 'pages_manage_posts,pages_read_engagement,publish_to_groups',
   linkedin: 'openid,email,profile,w_member_social',
   youtube: 'https://www.googleapis.com/auth/youtube.upload',
@@ -22,7 +22,7 @@ const getAuthUrl = (platform: string, userId: number): string => {
   const clientId = process.env[`${platform.toUpperCase()}_CLIENT_ID`];
   // Use hardcoded redirect URI for TikTok to ensure consistency
   const redirectUri = platform === 'tiktok' 
-    ? 'https://shwaah.onrender.com/api/social/callback/tiktok'
+    ? 'https://shwaah-8n4g.onrender.com/api/social/callback/tiktok'
     : process.env[`${platform.toUpperCase()}_REDIRECT_URI`];
   const scopes = PLATFORM_SCOPES[platform];
   
@@ -31,7 +31,7 @@ const getAuthUrl = (platform: string, userId: number): string => {
   }
   
   const authUrls: Record<string, string> = {
-    instagram: `https://www.facebook.com/v19.0/dialog/oauth?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scopes}&response_type=code&state=${userId}`,
+    instagram: `https://api.instagram.com/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scopes}&response_type=code&state=${userId}`,
     facebook: `https://www.facebook.com/v18.0/dialog/oauth?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scopes}&response_type=code&state=${userId}`,
     linkedin: `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scopes}&state=${userId}`,
     youtube: `https://accounts.google.com/o/oauth2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scopes}&response_type=code&access_type=offline&state=${userId}`,

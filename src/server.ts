@@ -14,6 +14,7 @@ import socialRoutes from './routes/social';
 import postsRoutes from './routes/posts';
 import campaignsRoutes from './routes/campaigns';
 import analyticsRoutes from './routes/analytics';
+import webhookRoutes from './routes/webhooks';
 
 // Import scheduler
 import './services/schedulerService';
@@ -50,6 +51,7 @@ app.use('/api/social', socialRoutes);
 app.use('/api/posts', postsRoutes);
 app.use('/api/campaigns', campaignsRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/webhooks', webhookRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -87,7 +89,7 @@ async function startServer() {
     
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`🏥 Health check: https://shwaah.onrender.com/api/health`);
+      console.log(`🏥 Health check: https://shwaah-8n4g.onrender.com/api/health`);
       console.log(`🗄️  Database: Turso (libsql)`);
       console.log('\n🚀 Social Media Publisher API');
       console.log('\n📋 Available endpoints:');

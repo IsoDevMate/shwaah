@@ -52,7 +52,7 @@ YOUTUBE_CLIENT_ID="124326887396-vg53kkpmj9364ja6b3r5ffrp2lpmu6rv.apps.googleuser
 YOUTUBE_CLIENT_SECRET="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"
 
 # Redirect URIs
-REDIRECT_URI=https://shwaah.onrender.com/api/social/callback
+REDIRECT_URI=https://shwaah-8n4g.onrender.com/api/social/callback
 ```
 
 ## Specific Errors Encountered
@@ -75,7 +75,7 @@ Invalid Request: Request parameters are invalid: Invalid platform app
 }
 ```
 - **Likely Cause**: Redirect URI mismatch in Google Cloud Console
-- **Expected URI**: `https://shwaah.onrender.com/api/social/callback/youtube`
+- **Expected URI**: `https://shwaah-8n4g.onrender.com/api/social/callback/youtube`
 
 ## Code Structure
 
