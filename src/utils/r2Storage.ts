@@ -23,15 +23,7 @@ export const uploadToR2 = multer({
       const fileName = `${Date.now()}-${uuidv4()}-${file.originalname}`;
       cb(null, fileName);
     },
-    contentType: multerS3.AUTO_CONTENT_TYPE,
-    // Use public URL if available, otherwise fall back to endpoint
-    ...(process.env.R2_PUBLIC_URL && {
-      acl: 'public-read',
-      // Override the location to use public URL
-      metadata: (req, file, cb) => {
-        cb(null, {});
-      }
-    })
+    contentType: multerS3.AUTO_CONTENT_TYPE
   }),
   limits: {
     fileSize: 100 * 1024 * 1024 // 100MB limit
