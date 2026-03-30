@@ -63,6 +63,10 @@ export async function exchangeCodeForTokens(platform: string, code: string): Pro
     let response;
     
     if (platform === 'instagram') {
+      console.log('Instagram token request:', {
+        url: tokenUrls[platform],
+        data: tokenData[platform]
+      });
       response = await axios.post(tokenUrls[platform],
         new URLSearchParams(tokenData[platform]).toString(),
         { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
@@ -109,9 +113,10 @@ export async function exchangeCodeForTokens(platform: string, code: string): Pro
     return response.data;
   } catch (error: any) {
     console.error(`Token exchange failed for ${platform}:`, error.response?.data || error.message);
+    console.error('Full error response:', JSON.stringify(error.response?.data, null, 2));
     console.error('Request details:', {
       url: tokenUrls[platform],
-      data: platform === 'tiktok' ? tokenData[platform] : 'hidden'
+      data: tokenData[platform]
     });
     console.error('Stack:', error.stack);
     throw error;
