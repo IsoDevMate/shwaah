@@ -46,20 +46,29 @@ const publishToInstagram = async (accessToken: string, content: string, mediaUrl
     throw new Error('Instagram requires media content');
   }
 
-  // Create media object
-  const mediaResponse = await axios.post(`${config.baseUrl}${config.postEndpoint}`, {
-    image_url: mediaUrl,
-    caption: content,
-    access_token: accessToken
-  });
-  
-  // Publish media
-  const publishResponse = await axios.post(`${config.baseUrl}/me/media_publish`, {
-    creation_id: mediaResponse.data.id,
-    access_token: accessToken
-  });
-  
-  return publishResponse.data;
+  try {
+    // Create media object
+    console.log('[Instagram] Creating media container with:', { image_url: mediaUrl, caption: content });
+    const mediaResponse = await axios.post(`${config.baseUrl}${config.postEndpoint}`, {
+      image_url: mediaUrl,
+      caption: content,
+      access_token: accessToken
+    });
+    
+    console.log('[Instagram] Media container created:', mediaResponse.data);
+    
+    // Publish media
+    const publishResponse = await axios.post(`${config.baseUrl}/me/media_publish`, {
+      creation_id: mediaResponse.data.id,
+      access_token: accessToken
+    });
+    
+    return publishResponse.data;
+  } catch (error: any) {
+    console.error('[Instagram] Publish failed:', error.response?.data || error.message);
+    console.error('[Instagram] Full error:', JSON.stringify(error.response?.data, null, 2));
+    throw error;
+  }
 };
 
 const publishToFacebook = async (accessToken: string, content: string, mediaUrl?: string): Promise<any> => {

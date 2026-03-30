@@ -109,8 +109,8 @@ router.get('/callback/:platform', asyncHandler('Social', 'OAuthCallback')(async 
       platform: platform as any,
       platformUserId: userInfo.id,
       platformUsername: userInfo.username || userInfo.name,
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token || null,
+      accessToken: encrypt(tokens.access_token),
+      refreshToken: tokens.refresh_token ? encrypt(tokens.refresh_token) : null,
       expiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : null,
       isActive: true
     });
