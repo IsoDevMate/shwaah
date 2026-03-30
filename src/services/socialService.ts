@@ -453,14 +453,6 @@ const publishTikTokVideo = async (accessToken: string, content: string, mediaUrl
       message: `Video uploaded to TikTok inbox successfully! User needs to open TikTok app to review and post the video. Title suggestion: "${content.substring(0, 100)}"`
     };
 };
-    
-    if (error.response?.status === 401 || error.response?.status === 403) {
-      throw new Error('TikTok authentication failed - token may be expired. Please reconnect your TikTok account.');
-    }
-    
-    throw new Error(`TikTok publishing failed: ${error.response?.data?.error?.message || error.message}`);
-  }
-};
 
 export const publishToSocial = async (
   platform: string, 
