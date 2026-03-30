@@ -198,7 +198,7 @@ router.post('/publish/:postId', authenticateUser, async (req: AuthRequest, res) 
     });
     
     const message = allFailed 
-      ? 'Post failed successfully' 
+      ? 'Post failed to publish on all platforms' 
       : hasFailures 
         ? 'Post published partially - some platforms failed'
         : 'Post published successfully';
