@@ -20,7 +20,13 @@ router.post('/create', authenticateUser, uploadToR2.array('media', 10), asyncHan
   const { content, platforms, scheduledAt, campaignId } = validation.data;
   const files = req.files as Express.MulterS3.File[];
   
-  const mediaUrls = files?.map(file => file.location) || [];
+  // Convert R2 URLs to public URLs if R2_PUBLIC_URL is set
+  const mediaUrls = files?.map(file => {
+    if (process.env.R2_PUBLIC_URL && file.key) {
+      return `${process.env.R2_PUBLIC_URL}/${file.key}`;
+    }
+    return file.location;
+  }) || [];
   
   const connectedAccounts = await SocialAccount.findByUserAndPlatforms(req.user!.id, platforms);
   
