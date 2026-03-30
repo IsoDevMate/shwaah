@@ -39,6 +39,8 @@ const PLATFORM_CONFIGS: Record<string, PlatformConfig> = {
   }
 };
 
+const isVideo = (url: string) => /\.(mp4|mov|avi|mkv|webm)(\?|$)/i.test(url);
+
 const publishToInstagram = async (accessToken: string, content: string, mediaUrl?: string): Promise<any> => {
   const config = PLATFORM_CONFIGS.instagram;
   
@@ -47,16 +49,44 @@ const publishToInstagram = async (accessToken: string, content: string, mediaUrl
   }
 
   try {
-    // Create media object
-    console.log('[Instagram] Creating media container with:', { image_url: mediaUrl, caption: content });
-    const mediaResponse = await axios.post(`${config.baseUrl}${config.postEndpoint}`, {
-      image_url: mediaUrl,
+    const mediaIsVideo = isVideo(mediaUrl);
+    console.log('[Instagram] Creating media container with:', { mediaUrl, isVideo: mediaIsVideo, caption: content });
+
+    // Build container params based on media type
+    const containerParams: any = {
       caption: content,
       access_token: accessToken
-    });
-    
+    };
+
+    if (mediaIsVideo) {
+      containerParams.media_type = 'REELS';
+      containerParams.video_url = mediaUrl;
+    } else {
+      containerParams.image_url = mediaUrl;
+    }
+
+    const mediaResponse = await axios.post(`${config.baseUrl}${config.postEndpoint}`, containerParams);
     console.log('[Instagram] Media container created:', mediaResponse.data);
-    
+
+    // For videos, poll until ready before publishing
+    if (mediaIsVideo) {
+      const containerId = mediaResponse.data.id;
+      let status = 'IN_PROGRESS';
+      let attempts = 0;
+      while (status === 'IN_PROGRESS' && attempts < 20) {
+        await new Promise(r => setTimeout(r, 5000));
+        const statusRes = await axios.get(`${config.baseUrl}/${containerId}`, {
+          params: { fields: 'status_code', access_token: accessToken }
+        });
+        status = statusRes.data.status_code;
+        attempts++;
+        console.log(`[Instagram] Video processing status: ${status} (attempt ${attempts})`);
+      }
+      if (status !== 'FINISHED') {
+        throw new Error(`Instagram video processing failed with status: ${status}`);
+      }
+    }
+
     // Publish media
     const publishResponse = await axios.post(`${config.baseUrl}/me/media_publish`, {
       creation_id: mediaResponse.data.id,
@@ -257,10 +287,70 @@ const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: 
   console.log('[tiktok] Has media URL:', !!mediaUrl);
   
   if (!mediaUrl) {
-    throw new Error('TikTok requires video content. Please upload a video file.');
+    throw new Error('TikTok requires media content (photo or video).');
   }
-  
+
+  const mediaIsVideo = isVideo(mediaUrl);
+  console.log('[TikTok] Media type:', mediaIsVideo ? 'VIDEO' : 'PHOTO');
+
   try {
+    if (mediaIsVideo) {
+      return await publishTikTokVideo(accessToken, content, mediaUrl);
+    } else {
+      return await publishTikTokPhoto(accessToken, content, mediaUrl);
+    }
+  } catch (error: any) {
+    console.error('[TikTok] Publishing failed:', error.message);
+    console.error('[TikTok] Error details:', error.response?.data || error.code || error);
+    
+    if (error.code === 'ETIMEDOUT' || error.code === 'ENETUNREACH') {
+      throw new Error('Network timeout: Unable to connect to TikTok servers. Please try again.');
+    }
+    
+    if (error.response?.data?.error?.code === 'scope_not_authorized') {
+      throw new Error('TikTok scope error: Please disconnect and reconnect your TikTok account.');
+    }
+    
+    throw error;
+  }
+};
+
+const publishTikTokPhoto = async (accessToken: string, content: string, mediaUrl: string): Promise<any> => {
+  console.log('[TikTok] Publishing photo via MEDIA_UPLOAD...');
+  
+  const response = await axios.post(
+    'https://open.tiktokapis.com/v2/post/publish/content/init/',
+    {
+      post_info: {
+        title: content.substring(0, 90),
+        description: content.substring(0, 4000)
+      },
+      source_info: {
+        source: 'PULL_FROM_URL',
+        photo_cover_index: 0,
+        photo_images: [mediaUrl]
+      },
+      post_mode: 'MEDIA_UPLOAD',
+      media_type: 'PHOTO'
+    },
+    {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json; charset=UTF-8'
+      }
+    }
+  );
+
+  console.log('[TikTok] Photo uploaded to inbox successfully');
+  
+  return {
+    publish_id: response.data.data.publish_id,
+    status: 'Uploaded to Inbox',
+    message: `Photo uploaded to TikTok inbox successfully! User needs to open TikTok app to review and post. Title: "${content.substring(0, 90)}"`
+  };
+};
+
+const publishTikTokVideo = async (accessToken: string, content: string, mediaUrl: string): Promise<any> => {
     // Get video file from R2 with retry logic
     console.log('[tiktok] Fetching video from R2...');
     const signedUrl = await getSignedUrlForFile(mediaUrl);
@@ -362,22 +452,7 @@ const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: 
       status: 'Uploaded to Inbox', 
       message: `Video uploaded to TikTok inbox successfully! User needs to open TikTok app to review and post the video. Title suggestion: "${content.substring(0, 100)}"`
     };
-  } catch (error: any) {
-    console.error('[TikTok] Publishing failed:', error.message);
-    console.error('[TikTok] Error details:', error.response?.data || error.code || error);
-    
-    // Check for network/timeout errors
-    if (error.code === 'ETIMEDOUT' || error.code === 'ENETUNREACH') {
-      throw new Error('Network timeout: Unable to connect to video storage or TikTok servers. Please try again in a few minutes.');
-    }
-    
-    // Check for scope error
-    if (error.response?.data?.error?.code === 'scope_not_authorized') {
-      throw new Error(
-        'TikTok scope error: Your account needs to reconnect with proper permissions. ' +
-        'Current method requires "video.upload" scope. Please disconnect and reconnect your TikTok account.'
-      );
-    }
+};
     
     if (error.response?.status === 401 || error.response?.status === 403) {
       throw new Error('TikTok authentication failed - token may be expired. Please reconnect your TikTok account.');
