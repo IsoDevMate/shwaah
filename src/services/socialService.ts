@@ -68,23 +68,25 @@ const publishToInstagram = async (accessToken: string, content: string, mediaUrl
     const mediaResponse = await axios.post(`${config.baseUrl}${config.postEndpoint}`, containerParams);
     console.log('[Instagram] Media container created:', mediaResponse.data);
 
-    // For videos, poll until ready before publishing
-    if (mediaIsVideo) {
-      const containerId = mediaResponse.data.id;
-      let status = 'IN_PROGRESS';
-      let attempts = 0;
-      while (status === 'IN_PROGRESS' && attempts < 20) {
-        await new Promise(r => setTimeout(r, 5000));
-        const statusRes = await axios.get(`${config.baseUrl}/${containerId}`, {
-          params: { fields: 'status_code', access_token: accessToken }
-        });
-        status = statusRes.data.status_code;
-        attempts++;
-        console.log(`[Instagram] Video processing status: ${status} (attempt ${attempts})`);
-      }
-      if (status !== 'FINISHED') {
-        throw new Error(`Instagram video processing failed with status: ${status}`);
-      }
+    // Poll until ready before publishing (both photos and videos)
+    const containerId = mediaResponse.data.id;
+    let status = 'IN_PROGRESS';
+    let attempts = 0;
+    const maxAttempts = mediaIsVideo ? 20 : 10; // Videos take longer
+    const pollInterval = mediaIsVideo ? 5000 : 2000; // 5s for video, 2s for photo
+
+    while (status === 'IN_PROGRESS' && attempts < maxAttempts) {
+      await new Promise(r => setTimeout(r, pollInterval));
+      const statusRes = await axios.get(`${config.baseUrl}/${containerId}`, {
+        params: { fields: 'status_code', access_token: accessToken }
+      });
+      status = statusRes.data.status_code;
+      attempts++;
+      console.log(`[Instagram] ${mediaIsVideo ? 'Video' : 'Photo'} processing status: ${status} (attempt ${attempts})`);
+    }
+    
+    if (status !== 'FINISHED') {
+      throw new Error(`Instagram media processing failed with status: ${status}`);
     }
 
     // Publish media
