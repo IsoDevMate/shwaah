@@ -19,6 +19,8 @@ router.post('/create', authenticateUser, (req, res, next) => {
     next();
   });
 }, asyncHandler('Posts', 'Create')(async (req: AuthRequest, res) => {
+  console.log('[Posts] req.body:', JSON.stringify(req.body));
+  console.log('[Posts] req.files:', req.files?.length ?? 0, 'files');
   const validation = createPostSchema.safeParse(req.body);
   if (!validation.success) {
     const errorMessage = validation.error.issues[0]?.message || 'Validation failed';
