@@ -10,7 +10,15 @@ import { asyncHandler, sendSuccess, sendError } from '../utils/routeHelpers';
 const router = express.Router();
 
 // Create post with multiple file uploads
-router.post('/create', authenticateUser, uploadToR2.array('media', 10), asyncHandler('Posts', 'Create')(async (req: AuthRequest, res) => {
+router.post('/create', authenticateUser, (req, res, next) => {
+  uploadToR2.array('media', 10)(req, res, (err) => {
+    if (err) {
+      console.error('[Posts] Multer error:', err);
+      return res.status(400).json({ error: err.message });
+    }
+    next();
+  });
+}, asyncHandler('Posts', 'Create')(async (req: AuthRequest, res) => {
   const validation = createPostSchema.safeParse(req.body);
   if (!validation.success) {
     const errorMessage = validation.error.issues[0]?.message || 'Validation failed';
