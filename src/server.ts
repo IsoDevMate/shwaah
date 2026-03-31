@@ -32,10 +32,21 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use((req, res, next) => {
-  if (req.headers['content-type']?.startsWith('multipart/form-data')) return next();
-  express.json({ limit: '50mb' })(req, res, next);
+  const contentType = req.headers['content-type'] || '';
+  if (contentType.includes('multipart/form-data')) return next();
+  express.json({ limit: '50mb' })(req, res, (err) => {
+    if (err) {
+      console.warn('[Body Parser] JSON parse skipped:', err.message);
+      return next();
+    }
+    next();
+  });
 });
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use((req, res, next) => {
+  const contentType = req.headers['content-type'] || '';
+  if (contentType.includes('multipart/form-data')) return next();
+  express.urlencoded({ extended: true, limit: '50mb' })(req, res, next);
+});
 
 // Request logging middleware
 app.use(requestLogger);
