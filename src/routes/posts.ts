@@ -28,15 +28,14 @@ router.post('/create', authenticateUser, (req, res, next) => {
   }
   
   const { content, platforms, scheduledAt, campaignId } = validation.data;
-  const files = req.files as Express.MulterS3.File[];
-  
-  // Convert R2 URLs to public URLs if R2_PUBLIC_URL is set
+  const files = req.files as (Express.MulterS3.File | Express.Multer.File)[];
+
   const mediaUrls = files?.map(file => {
-    if (process.env.R2_PUBLIC_URL && file.key) {
-      return `${process.env.R2_PUBLIC_URL}/${file.key}`;
-    }
-    return file.location;
-  }) || [];
+    const s3File = file as Express.MulterS3.File;
+    if (s3File.location) return s3File.location;
+    if (process.env.R2_PUBLIC_URL && s3File.key) return `${process.env.R2_PUBLIC_URL}/${s3File.key}`;
+    return null;
+  }).filter(Boolean) as string[] || [];
   
   const connectedAccounts = await SocialAccount.findByUserAndPlatforms(req.user!.id, platforms);
   

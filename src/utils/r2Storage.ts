@@ -6,6 +6,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 // Configure S3 client for Cloudflare R2
 const endpoint = process.env.R2_ENDPOINT?.replace('/marketingaddons', '');
+console.log('[R2] Endpoint:', endpoint ?? 'MISSING - using memoryStorage');
+console.log('[R2] Bucket:', process.env.R2_BUCKET_NAME ?? 'MISSING');
 
 export const s3Client = endpoint
   ? new S3Client({
@@ -20,13 +22,12 @@ export const s3Client = endpoint
 
 // Multer configuration for R2 upload
 export const uploadToR2 = multer({
-  storage: s3Client
+  storage: s3Client && process.env.R2_BUCKET_NAME
     ? multerS3({
         s3: s3Client,
-        bucket: process.env.R2_BUCKET_NAME!,
+        bucket: process.env.R2_BUCKET_NAME,
         key: (req, file, cb) => {
-          const fileName = `${Date.now()}-${uuidv4()}-${file.originalname}`;
-          cb(null, fileName);
+          cb(null, `${Date.now()}-${uuidv4()}-${file.originalname}`);
         },
         contentType: multerS3.AUTO_CONTENT_TYPE
       })
