@@ -163,7 +163,7 @@ export class Post {
 
   static async findScheduledByUser(userId: string): Promise<PostDB[]> {
     const result = await Database.execute(
-      'SELECT * FROM Posts WHERE userId = ? AND status = "scheduled" AND scheduledAt >= datetime("now") ORDER BY scheduledAt ASC',
+      'SELECT * FROM Posts WHERE userId = ? AND status = "scheduled" ORDER BY scheduledAt ASC',
       [userId]
     );
     return result.rows.map(rowToPostDB);

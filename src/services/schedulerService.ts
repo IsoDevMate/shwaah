@@ -114,12 +114,14 @@ async function publishScheduledPost(post: any) {
         
         const refreshedAccount = await refreshTokenIfNeeded(account);
         const mediaUrl = post.mediaUrls && post.mediaUrls.length > 0 ? post.mediaUrls[0] : undefined;
+        const mediaUrls = post.mediaUrls || [];
         
         const result = await publishToSocial(
           account.platform as string, 
           refreshedAccount.accessToken, 
           post.content, 
-          mediaUrl
+          mediaUrl,
+          mediaUrls
         );
         
         publishResults[account.platform as string] = { 
