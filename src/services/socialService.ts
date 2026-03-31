@@ -39,6 +39,20 @@ const PLATFORM_CONFIGS: Record<string, PlatformConfig> = {
 
 const isVideo = (url: string) => /\.(mp4|mov|avi|mkv|webm)(\?|$)/i.test(url);
 
+async function retryPost<T>(fn: () => Promise<T>, retries = 3, delayMs = 4000): Promise<T> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      const isTransient = err.response?.data?.error?.is_transient === true;
+      if (!isTransient || i === retries - 1) throw err;
+      console.log(`[Instagram] Transient error, retrying in ${delayMs / 1000}s... (attempt ${i + 1}/${retries})`);
+      await new Promise(r => setTimeout(r, delayMs));
+    }
+  }
+  throw new Error('retryPost exhausted');
+}
+
 const publishToInstagram = async (accessToken: string, content: string, mediaUrl?: string, mediaUrls?: string[]): Promise<any> => {
   const config = PLATFORM_CONFIGS.instagram;
   
@@ -89,10 +103,10 @@ const publishToInstagram = async (accessToken: string, content: string, mediaUrl
         console.log(`[Instagram] Carousel status: ${status} (attempt ${attempts})`);
       }
 
-      const publishResponse = await axios.post(`${config.baseUrl}/me/media_publish`, {
+      const publishResponse = await retryPost(() => axios.post(`${config.baseUrl}/me/media_publish`, {
         creation_id: carouselId,
         access_token: accessToken
-      });
+      }));
 
       return publishResponse.data;
     }
@@ -136,10 +150,10 @@ const publishToInstagram = async (accessToken: string, content: string, mediaUrl
     }
 
     // Publish media
-    const publishResponse = await axios.post(`${config.baseUrl}/me/media_publish`, {
+    const publishResponse = await retryPost(() => axios.post(`${config.baseUrl}/me/media_publish`, {
       creation_id: mediaResponse.data.id,
       access_token: accessToken
-    });
+    }));
     
     return publishResponse.data;
   } catch (error: any) {
