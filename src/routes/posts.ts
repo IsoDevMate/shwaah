@@ -44,47 +44,6 @@ router.post('/create', authenticateUser, uploadToR2.array('media', 10), asyncHan
     );
   }
   
-  // Server-side validation for scheduledAt
-  if (scheduledAt) {
-    const scheduledDate = new Date(scheduledAt);
-    const now = new Date();
-    const minScheduleTime = new Date(now.getTime() + 5 * 60 * 1000);
-    
-    if (isNaN(scheduledDate.getTime())) {
-      return sendError(
-        req,
-        res,
-        new Error('Invalid date format'),
-        'The scheduled date is invalid',
-        400,
-        'INVALID_DATE'
-      );
-    }
-    
-    if (scheduledDate < minScheduleTime) {
-      return sendError(
-        req,
-        res,
-        new Error('Schedule time too soon'),
-        `Posts must be scheduled at least 5 minutes in the future. Please schedule for ${minScheduleTime.toISOString()} or later.`,
-        400,
-        'SCHEDULE_TOO_SOON'
-      );
-    }
-    
-    const oneYearFromNow = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
-    if (scheduledDate > oneYearFromNow) {
-      return sendError(
-        req,
-        res,
-        new Error('Schedule time too far'),
-        'Posts cannot be scheduled more than 1 year in advance',
-        400,
-        'SCHEDULE_TOO_FAR'
-      );
-    }
-  }
-  
   const status = scheduledAt ? 'scheduled' : 'pending';
   
   const post = await Post.create({

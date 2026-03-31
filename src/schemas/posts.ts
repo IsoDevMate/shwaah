@@ -13,16 +13,10 @@ export const createPostSchema = z.object({
   scheduledAt: z.string().datetime().optional().refine((date) => {
     if (!date) return true;
     const scheduledDate = new Date(date);
-    const now = new Date();
-    const minScheduleTime = new Date(now.getTime() + 5 * 60 * 1000);
-    
     if (isNaN(scheduledDate.getTime())) return false;
-    if (scheduledDate < minScheduleTime) return false;
-    
-    return true;
-  }, {
-    message: 'Scheduled time must be at least 5 minutes from now'
-  }).transform((date) => date && date.trim() !== '' ? date : undefined),
+    const bufferMinutes = parseInt(process.env.SCHEDULE_BUFFER_MINUTES ?? '5', 10);
+    return scheduledDate >= new Date(Date.now() + bufferMinutes * 60 * 1000);
+  }, { message: 'Scheduled time must be at least 5 minutes from now' }).transform((date) => date && date.trim() !== '' ? date : undefined),
   campaignId: z.string().uuid().optional()
 });
 
