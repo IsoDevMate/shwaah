@@ -33,14 +33,9 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use((req, res, next) => {
   const contentType = req.headers['content-type'] || '';
-  if (contentType.includes('multipart/form-data')) return next();
-  express.json({ limit: '50mb' })(req, res, (err) => {
-    if (err) {
-      console.warn('[Body Parser] JSON parse skipped:', err.message);
-      return next();
-    }
-    next();
-  });
+  // Only run JSON parser for application/json requests
+  if (!contentType.includes('application/json')) return next();
+  express.json({ limit: '50mb' })(req, res, next);
 });
 app.use((req, res, next) => {
   const contentType = req.headers['content-type'] || '';
