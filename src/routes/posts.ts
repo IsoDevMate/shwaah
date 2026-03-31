@@ -45,6 +45,13 @@ router.post('/create', authenticateUser, uploadToR2.array('media', 10), asyncHan
   }
   
   const status = scheduledAt ? 'scheduled' : 'pending';
+
+  if (scheduledAt) {
+    const minScheduleTime = new Date(Date.now() + 5 * 60 * 1000);
+    if (new Date(scheduledAt) < minScheduleTime) {
+      return sendError(req, res, new Error('Schedule time must be at least 5 minutes from now'), 'Schedule time must be at least 5 minutes from now', 400, 'INVALID_SCHEDULE_TIME');
+    }
+  }
   
   const post = await Post.create({
     userId: req.user!.id,

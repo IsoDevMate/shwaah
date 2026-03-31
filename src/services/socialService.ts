@@ -66,6 +66,12 @@ const publishToInstagram = async (accessToken: string, content: string, mediaUrl
 
     // Carousel post (multiple images)
     if (allUrls.length > 1) {
+      const hasVideo = allUrls.some(isVideo);
+      const hasImage = allUrls.some(u => !isVideo(u));
+      if (hasVideo && hasImage) {
+        throw new Error('Instagram does not support mixing videos and images in a carousel. Use either all images or a single video.');
+      }
+
       console.log(`[Instagram] Creating carousel with ${allUrls.length} items`);
       
       // Create a container for each image
@@ -81,12 +87,12 @@ const publishToInstagram = async (accessToken: string, content: string, mediaUrl
       console.log('[Instagram] Carousel item containers:', containerIds);
 
       // Create carousel container
-      const carouselRes = await axios.post(`${config.baseUrl}${config.postEndpoint}`, {
+      const carouselRes = await retryPost(() => axios.post(`${config.baseUrl}${config.postEndpoint}`, {
         media_type: 'CAROUSEL',
         children: containerIds.join(','),
         caption: content,
         access_token: accessToken
-      });
+      }));
 
       const carouselId = carouselRes.data.id;
 
