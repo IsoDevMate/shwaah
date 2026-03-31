@@ -22,12 +22,22 @@ const postScheduler = cron.schedule('* * * * *', async () => {
     lastRunTime = new Date();
     schedulerStats.totalRuns++;
     
-    console.log(`[Scheduler] Running at ${lastRunTime.toISOString()}`);
-    
-    const scheduledPosts = await Post.findScheduled();
-    console.log(`[Scheduler] Found ${scheduledPosts.length} posts to publish`);
-    
-    for (const post of scheduledPosts) {
+    const now = new Date();
+    console.log(`[Scheduler] Running at ${now.toISOString()}`);
+
+    // Posts due now (already past their scheduled time)
+    const duePosts = await Post.findScheduled(0);
+    // Posts coming up in the next 5 minutes (for visibility/pre-flight logging)
+    const upcomingPosts = await Post.findScheduled(5);
+    const soonPosts = upcomingPosts.filter(p => !duePosts.find(d => d.id === p.id));
+
+    if (soonPosts.length > 0) {
+      console.log(`[Scheduler] Upcoming in next 5 min: ${soonPosts.map(p => `${p.id} @ ${p.scheduledAt}`).join(', ')}`);
+    }
+
+    console.log(`[Scheduler] Found ${duePosts.length} posts to publish`);
+
+    for (const post of duePosts) {
       await publishScheduledPost(post);
     }
     
@@ -238,7 +248,7 @@ export function getSchedulerHealth() {
 
 export async function triggerSchedulerManually() {
   console.log('[Scheduler] Manual trigger requested');
-  const scheduledPosts = await Post.findScheduled();
+  const scheduledPosts = await Post.findScheduled(0);
   console.log(`[Scheduler] Found ${scheduledPosts.length} posts to publish`);
   
   for (const post of scheduledPosts) {

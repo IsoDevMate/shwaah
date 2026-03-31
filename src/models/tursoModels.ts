@@ -154,9 +154,9 @@ export class Post {
     return result.rows.map(rowToPostDB);
   }
 
-  static async findScheduled(): Promise<PostDB[]> {
+  static async findScheduled(lookaheadMinutes = 0): Promise<PostDB[]> {
     const result = await Database.execute(
-      'SELECT * FROM Posts WHERE status = "scheduled" AND scheduledAt IS NOT NULL AND datetime(scheduledAt) <= datetime("now")'
+      `SELECT * FROM Posts WHERE status = "scheduled" AND scheduledAt IS NOT NULL AND datetime(scheduledAt) <= datetime("now", "+${lookaheadMinutes} minutes") ORDER BY scheduledAt ASC`
     );
     return result.rows.map(rowToPostDB);
   }
