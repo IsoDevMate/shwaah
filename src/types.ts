@@ -35,15 +35,16 @@ export interface PlatformUserInfo {
 }
 
 export interface PostDB {
-  id: string; // Changed from number to string for UUID
-  userId: string; // Changed from number to string for UUID
+  id: string;
+  userId: string;
   content: string;
   mediaUrls: string[];
   platforms: string[];
+  platformContent?: Record<string, { content?: string; hashtags?: string }> | null;
   status: string;
   publishResults: any;
   scheduledAt?: string;
-  campaignId?: string; // Changed from number to string for UUID
+  campaignId?: string;
   createdAt: string;
   updatedAt: string;
 }

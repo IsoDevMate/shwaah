@@ -82,14 +82,14 @@ export class SocialAccount {
 
   static async upsert(data: any) {
     const existing = await Database.execute(
-      'SELECT id FROM SocialAccounts WHERE userId = ? AND platform = ?',
-      [data.userId, data.platform]
+      'SELECT id FROM SocialAccounts WHERE userId = ? AND platform = ? AND platformUserId = ?',
+      [data.userId, data.platform, data.platformUserId]
     );
     
     if (existing.rows.length > 0) {
       await Database.execute(
-        'UPDATE SocialAccounts SET platformUserId = ?, platformUsername = ?, accessToken = ?, refreshToken = ?, expiresAt = ?, isActive = ?, updatedAt = CURRENT_TIMESTAMP WHERE userId = ? AND platform = ?',
-        [data.platformUserId, data.platformUsername, data.accessToken, data.refreshToken, data.expiresAt, data.isActive, data.userId, data.platform]
+        'UPDATE SocialAccounts SET platformUsername = ?, accessToken = ?, refreshToken = ?, expiresAt = ?, isActive = ?, updatedAt = CURRENT_TIMESTAMP WHERE userId = ? AND platform = ? AND platformUserId = ?',
+        [data.platformUsername, data.accessToken, data.refreshToken, data.expiresAt, data.isActive, data.userId, data.platform, data.platformUserId]
       );
       return { id: String(existing.rows[0].id), ...data };
     } else {
@@ -103,6 +103,7 @@ function rowToPostDB(row: Record<string, Value>): PostDB {
   const mediaUrls = JSON.parse(String(row.mediaUrls || '[]'));
   const platforms = JSON.parse(String(row.platforms));
   const publishResults = row.publishResults ? JSON.parse(String(row.publishResults)) : null;
+  const platformContent = row.platformContent ? JSON.parse(String(row.platformContent)) : null;
 
   return {
     id: String(row.id),
@@ -110,6 +111,7 @@ function rowToPostDB(row: Record<string, Value>): PostDB {
     content: String(row.content),
     mediaUrls: mediaUrls,
     platforms: platforms,
+    platformContent: platformContent,
     status: String(row.status),
     publishResults: publishResults,
     scheduledAt: row.scheduledAt ? String(row.scheduledAt) : undefined,
@@ -123,8 +125,8 @@ export class Post {
   static async create(data: any): Promise<PostDB> {
     const id = generateUUID();
     await Database.execute(
-      'INSERT INTO Posts (id, userId, content, mediaUrls, platforms, status, scheduledAt, campaignId) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, data.userId, data.content, JSON.stringify(data.mediaUrls), JSON.stringify(data.platforms), data.status, data.scheduledAt, data.campaignId]
+      'INSERT INTO Posts (id, userId, content, mediaUrls, platforms, platformContent, status, scheduledAt, campaignId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, data.userId, data.content, JSON.stringify(data.mediaUrls), JSON.stringify(data.platforms), data.platformContent ? JSON.stringify(data.platformContent) : null, data.status, data.scheduledAt, data.campaignId]
     );
     return { 
       id, 
@@ -132,6 +134,7 @@ export class Post {
       content: data.content,
       mediaUrls: data.mediaUrls,
       platforms: data.platforms,
+      platformContent: data.platformContent ?? null,
       status: data.status,
       publishResults: null,
       scheduledAt: data.scheduledAt,

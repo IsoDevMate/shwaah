@@ -10,6 +10,9 @@ export const createPostSchema = z.object({
       throw new Error('Invalid platforms format');
     }
   }).pipe(z.array(z.enum(['instagram', 'facebook', 'linkedin', 'youtube', 'tiktok'])).min(1, 'At least one platform required')),
+  platformContent: z.string().transform((val) => {
+    try { return JSON.parse(val); } catch { return {}; }
+  }).optional(),
   scheduledAt: z.string().datetime().optional().refine((date) => {
     if (!date) return true;
     const scheduledDate = new Date(date);

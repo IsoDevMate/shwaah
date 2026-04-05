@@ -27,7 +27,7 @@ router.post('/create', authenticateUser, (req, res, next) => {
     return sendError(req, res, new Error(errorMessage), errorMessage, 400, 'VALIDATION_ERROR');
   }
   
-  const { content, platforms, scheduledAt, campaignId } = validation.data;
+  const { content, platforms, scheduledAt, campaignId, platformContent } = validation.data;
   const files = req.files as (Express.MulterS3.File | Express.Multer.File)[];
 
   const mediaUrls = files?.map(file => {
@@ -67,6 +67,7 @@ router.post('/create', authenticateUser, (req, res, next) => {
     content,
     mediaUrls,
     platforms,
+    platformContent: platformContent ?? null,
     status,
     scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
     campaignId: campaignId || null

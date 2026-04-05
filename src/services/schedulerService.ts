@@ -130,57 +130,33 @@ async function publishScheduledPost(post: any) {
         
         const refreshedAccount = await refreshTokenIfNeeded(account);
 
+        // Use per-platform content override if available, fall back to base content
+        const platformOverride = post.platformContent?.[account.platform as string];
+        const postContent = platformOverride?.content
+          ? `${platformOverride.content}${platformOverride.hashtags ? '\n' + platformOverride.hashtags : ''}`
+          : post.content;
+
         // For Instagram and TikTok with mixed media, publish images and videos separately
         if (hasMixedMedia && (account.platform === 'instagram' || account.platform === 'tiktok')) {
           console.log(`[Scheduler] ${account.platform} - mixed media detected, splitting into ${imageUrls.length} images + ${videoUrls.length} videos`);
           
           const splitResults: any[] = [];
 
-          // Publish images first
           if (imageUrls.length > 0) {
-            const imgResult = await publishToSocial(
-              account.platform as string,
-              refreshedAccount.accessToken,
-              post.content,
-              imageUrls[0],
-              imageUrls
-            );
+            const imgResult = await publishToSocial(account.platform as string, refreshedAccount.accessToken, postContent, imageUrls[0], imageUrls);
             splitResults.push({ type: 'images', data: imgResult });
-            console.log(`[Scheduler] ${account.platform} - images published`);
           }
 
-          // Publish each video separately
           for (const videoUrl of videoUrls) {
-            const vidResult = await publishToSocial(
-              account.platform as string,
-              refreshedAccount.accessToken,
-              post.content,
-              videoUrl,
-              [videoUrl]
-            );
+            const vidResult = await publishToSocial(account.platform as string, refreshedAccount.accessToken, postContent, videoUrl, [videoUrl]);
             splitResults.push({ type: 'video', data: vidResult });
-            console.log(`[Scheduler] ${account.platform} - video published`);
           }
 
-          publishResults[account.platform as string] = {
-            success: true,
-            data: splitResults,
-            publishedAt: new Date().toISOString()
-          };
+          publishResults[account.platform as string] = { success: true, data: splitResults, publishedAt: new Date().toISOString() };
         } else {
           const mediaUrl = allMediaUrls.length > 0 ? allMediaUrls[0] : undefined;
-          const result = await publishToSocial(
-            account.platform as string,
-            refreshedAccount.accessToken,
-            post.content,
-            mediaUrl,
-            allMediaUrls
-          );
-          publishResults[account.platform as string] = {
-            success: true,
-            data: result,
-            publishedAt: new Date().toISOString()
-          };
+          const result = await publishToSocial(account.platform as string, refreshedAccount.accessToken, postContent, mediaUrl, allMediaUrls);
+          publishResults[account.platform as string] = { success: true, data: result, publishedAt: new Date().toISOString() };
         }
 
         hasSuccess = true;

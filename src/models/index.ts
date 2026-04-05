@@ -90,6 +90,7 @@ export class Database {
         content TEXT NOT NULL,
         mediaUrls TEXT,
         platforms TEXT NOT NULL,
+        platformContent TEXT,
         status TEXT DEFAULT 'pending',
         publishResults TEXT,
         scheduledAt DATETIME,
