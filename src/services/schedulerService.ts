@@ -2,6 +2,8 @@ import cron from 'node-cron';
 import axios from 'axios';
 import { Post, SocialAccount, Analytics, Notification } from '../models/tursoModels';
 import { publishToSocial, refreshTokenIfNeeded } from './socialService';
+import { consumeCredits } from '../v2/services/creditsService';
+import { UserCreditsModel } from '../v2/schemas';
 
 let isSchedulerRunning = false;
 let lastRunTime: Date | null = null;
@@ -203,15 +205,20 @@ async function publishScheduledPost(post: any) {
       publishResults
     });
 
-    // Notify user
+    // Notify user + deduct/refund credits for scheduled posts
     const platforms = Array.isArray(post.platforms) ? post.platforms.join(', ') : String(post.platforms);
     const preview = String(post.content).substring(0, 60);
     if (status === 'published') {
+      // Deduct credit now that scheduled post actually published
+      await consumeCredits(post.userId, 1, 'scheduled_post_published', post.id).catch(() => {});
       await Notification.create({ userId: post.userId, type: 'success', title: 'Post Published', message: `Your post "${preview}..." was published to ${platforms}.`, postId: post.id });
     } else if (status === 'partial') {
+      // Partial success — still deduct (something was published)
+      await consumeCredits(post.userId, 1, 'scheduled_post_partial', post.id).catch(() => {});
       const failed = Object.entries(publishResults).filter(([, v]: any) => !v.success).map(([k]) => k).join(', ');
       await Notification.create({ userId: post.userId, type: 'warning', title: 'Post Partially Published', message: `Published to some platforms but failed on: ${failed}.`, postId: post.id });
     } else {
+      // Full failure — no credit deducted (was never deducted for scheduled posts)
       await Notification.create({ userId: post.userId, type: 'error', title: 'Post Failed', message: `Failed to publish "${preview}..." to ${platforms}.`, postId: post.id });
     }
 

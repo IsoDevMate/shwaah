@@ -7,6 +7,9 @@ import { uploadToR2 } from '../utils/r2Storage';
 import { createPostSchema } from '../schemas';
 import { asyncHandler, sendSuccess, sendError } from '../utils/routeHelpers';
 import { creditGuard } from '../v2/guards/creditGuard';
+import { checkCredits, consumeCredits, ensureCredits } from '../v2/services/creditsService';
+import { PLANS, type PlanId } from '../v2/schemas';
+import { Database } from '../models';
 
 const router = express.Router();
 
@@ -61,6 +64,21 @@ router.post('/create', authenticateUser, creditGuard('publish_post'), (req, res,
     if (new Date(scheduledAt) < minScheduleTime) {
       return sendError(req, res, new Error('Schedule time must be at least 5 minutes from now'), 'Schedule time must be at least 5 minutes from now', 400, 'INVALID_SCHEDULE_TIME');
     }
+
+    // Enforce free plan scheduled post limit
+    const credits = await ensureCredits(req.user!.id);
+    const plan = credits.plan as PlanId;
+    const maxScheduled = PLANS[plan].features.maxScheduledPosts;
+    if (maxScheduled !== 999999) {
+      const scheduledCount = await Database.execute(
+        "SELECT COUNT(*) as count FROM Posts WHERE userId = ? AND status = 'scheduled'",
+        [req.user!.id]
+      );
+      const count = Number(scheduledCount.rows[0]?.count ?? 0);
+      if (count >= maxScheduled) {
+        return sendError(req, res, new Error(`Your ${plan} plan allows a maximum of ${maxScheduled} scheduled post${maxScheduled > 1 ? 's' : ''}. Upgrade to schedule more.`), 'Schedule limit reached', 402, 'SCHEDULE_LIMIT_REACHED');
+      }
+    }
   }
   
   const post = await Post.create({
@@ -76,8 +94,10 @@ router.post('/create', authenticateUser, creditGuard('publish_post'), (req, res,
   
   console.log(`[Posts] Created post ${post.id} with status: ${status}${scheduledAt ? ` for ${scheduledAt}` : ''}`);
 
-  // Consume credit now that post is created
-  if ((req as any).consumeCredits) await (req as any).consumeCredits();
+  // Only deduct credits for immediate posts — scheduled posts deduct when they actually publish
+  if (status !== 'scheduled' && (req as any).consumeCredits) {
+    await (req as any).consumeCredits();
+  }
   
   return sendSuccess(req, res, {
     postId: post.id,
