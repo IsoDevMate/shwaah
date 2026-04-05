@@ -307,3 +307,44 @@ export class Analytics {
     return result.rows[0].count;
   }
 }
+
+export class Notification {
+  static async create(data: { userId: string; type: string; title: string; message: string; postId?: string }) {
+    const id = generateUUID();
+    await Database.execute(
+      'INSERT INTO Notifications (id, userId, type, title, message, postId) VALUES (?, ?, ?, ?, ?, ?)',
+      [id, data.userId, data.type, data.title, data.message, data.postId ?? null]
+    );
+    return { id, ...data, read: 0 };
+  }
+
+  static async findByUser(userId: string, limit = 30) {
+    const result = await Database.execute(
+      'SELECT * FROM Notifications WHERE userId = ? ORDER BY createdAt DESC LIMIT ?',
+      [userId, limit]
+    );
+    return result.rows;
+  }
+
+  static async markRead(id: string, userId: string) {
+    await Database.execute(
+      'UPDATE Notifications SET read = 1 WHERE id = ? AND userId = ?',
+      [id, userId]
+    );
+  }
+
+  static async markAllRead(userId: string) {
+    await Database.execute(
+      'UPDATE Notifications SET read = 1 WHERE userId = ?',
+      [userId]
+    );
+  }
+
+  static async unreadCount(userId: string) {
+    const result = await Database.execute(
+      'SELECT COUNT(*) as count FROM Notifications WHERE userId = ? AND read = 0',
+      [userId]
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  }
+}

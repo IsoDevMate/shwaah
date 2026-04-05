@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import axios from 'axios';
-import { Post, SocialAccount, Analytics } from '../models/tursoModels';
+import { Post, SocialAccount, Analytics, Notification } from '../models/tursoModels';
 import { publishToSocial, refreshTokenIfNeeded } from './socialService';
 
 let isSchedulerRunning = false;
@@ -227,6 +227,18 @@ async function publishScheduledPost(post: any) {
       publishResults
     });
 
+    // Notify user
+    const platforms = Array.isArray(post.platforms) ? post.platforms.join(', ') : String(post.platforms);
+    const preview = String(post.content).substring(0, 60);
+    if (status === 'published') {
+      await Notification.create({ userId: post.userId, type: 'success', title: 'Post Published', message: `Your post "${preview}..." was published to ${platforms}.`, postId: post.id });
+    } else if (status === 'partial') {
+      const failed = Object.entries(publishResults).filter(([, v]: any) => !v.success).map(([k]) => k).join(', ');
+      await Notification.create({ userId: post.userId, type: 'warning', title: 'Post Partially Published', message: `Published to some platforms but failed on: ${failed}.`, postId: post.id });
+    } else {
+      await Notification.create({ userId: post.userId, type: 'error', title: 'Post Failed', message: `Failed to publish "${preview}..." to ${platforms}.`, postId: post.id });
+    }
+
     console.log(`[Scheduler] Post ${post.id} completed with status: ${status}`);
     
   } catch (error) {
@@ -241,6 +253,7 @@ async function publishScheduledPost(post: any) {
           timestamp: new Date().toISOString()
         }
       });
+      await Notification.create({ userId: post.userId, type: 'error', title: 'Post Failed', message: `Failed to publish post: ${error instanceof Error ? error.message : 'Unknown error'}`, postId: post.id });
     } catch (updateError) {
       console.error(`[Scheduler] Failed to update post status:`, updateError);
     }

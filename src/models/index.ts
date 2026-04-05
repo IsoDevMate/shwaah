@@ -130,6 +130,20 @@ export class Database {
       )
     `);
 
+    await this.execute(`
+      CREATE TABLE IF NOT EXISTS Notifications (
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        read INTEGER DEFAULT 0,
+        postId TEXT,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (userId) REFERENCES Users(id)
+      )
+    `);
+
     console.log('✅ Database tables initialized with UUID schema');
     
     // Test R2 storage connection

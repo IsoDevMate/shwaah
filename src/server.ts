@@ -15,6 +15,7 @@ import postsRoutes from './routes/posts';
 import campaignsRoutes from './routes/campaigns';
 import analyticsRoutes from './routes/analytics';
 import webhookRoutes from './routes/webhooks';
+import notificationsRoutes from './routes/notifications';
 
 // Import scheduler
 import './services/schedulerService';
@@ -70,6 +71,7 @@ app.use('/api/posts', postsRoutes);
 app.use('/api/campaigns', campaignsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/webhooks', webhookRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 // TikTok domain verification file
 app.get('/tiktok05xz8pArp9G3euBN7jvNzR9SwapksMVu.txt', (req, res) => {
