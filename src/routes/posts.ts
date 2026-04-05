@@ -1,5 +1,5 @@
 import express from 'express';
-import { SocialAccount, Post } from '../models/tursoModels';
+import { SocialAccount, Post, Analytics, Notification } from '../models/tursoModels';
 import { authenticateUser } from '../middleware/auth';
 import { publishToSocial, refreshTokenIfNeeded } from '../services/socialService';
 import { AuthRequest, PublishResult } from '../types';
@@ -134,13 +134,19 @@ router.post('/publish/:postId', authenticateUser, async (req: AuthRequest, res) 
         const mediaUrl = post.mediaUrls && post.mediaUrls.length > 0 ? post.mediaUrls[0] : undefined;
         const mediaUrls = post.mediaUrls || [];
         
+        // Use per-platform content override if available
+        const platformOverride = post.platformContent?.[account.platform];
+        const postContent = platformOverride?.content
+          ? `${platformOverride.content}${platformOverride.hashtags ? '\n' + platformOverride.hashtags : ''}`
+          : post.content;
+
         console.log(`[Publish] ${account.platform} - Media URL:`, mediaUrl);
         
         // Publish to platform
         const result = await publishToSocial(
           account.platform, 
           refreshedAccount.accessToken, 
-          post.content, 
+          postContent, 
           mediaUrl,
           mediaUrls
         );
@@ -174,6 +180,24 @@ router.post('/publish/:postId', authenticateUser, async (req: AuthRequest, res) 
       status,
       publishResults
     });
+
+    // Create Analytics rows and notification for successful platforms
+    await Promise.all(
+      Object.entries(publishResults)
+        .filter(([, r]) => (r as any).success)
+        .map(([platform]) => Analytics.create({ postId, platform, views: 0, likes: 0, shares: 0, comments: 0, engagementRate: 0 }))
+    );
+
+    const platforms = post.platforms.join(', ');
+    const preview = post.content.substring(0, 60);
+    if (status === 'published') {
+      await Notification.create({ userId: req.user!.id, type: 'success', title: 'Post Published', message: `"${preview}..." published to ${platforms}.`, postId });
+    } else if (status === 'partial') {
+      const failed = Object.entries(publishResults).filter(([, r]) => !(r as any).success).map(([k]) => k).join(', ');
+      await Notification.create({ userId: req.user!.id, type: 'warning', title: 'Post Partially Published', message: `Failed on: ${failed}.`, postId });
+    } else {
+      await Notification.create({ userId: req.user!.id, type: 'error', title: 'Post Failed', message: `Failed to publish "${preview}...".`, postId });
+    }
     
     const message = allFailed 
       ? 'Post failed to publish on all platforms' 
