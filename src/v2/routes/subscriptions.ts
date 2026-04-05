@@ -2,7 +2,7 @@ import express from 'express';
 import { authenticateUser } from '../../middleware/auth';
 import { AuthRequest } from '../../types';
 import { paymentProvider } from '../services/paystackService';
-import { UserCreditsModel, SubscriptionModel, AffiliateModel, PLANS, type PlanId } from '../schemas';
+import { UserCreditsModel, SubscriptionModel, AffiliateModel, PLANS, PaymentHistoryModel, type PlanId } from '../schemas';
 import { ensureCredits } from '../services/creditsService';
 import { sendReceiptEmail } from '../services/emailService';
 import { Notification } from '../../models/tursoModels';
@@ -80,6 +80,17 @@ router.get('/verify', authenticateUser, async (req: AuthRequest, res) => {
     });
 
     await UserCreditsModel.upgradePlan(req.user!.id, plan);
+    // Record payment history
+    await PaymentHistoryModel.record({
+      userId: req.user!.id,
+      reference: result.reference,
+      plan,
+      billingCycle: result.billingCycle,
+      amount: result.amount,
+      currency: 'KES',
+      status: 'success',
+      paystackCustomerId: result.customerId || undefined,
+    });
     // Log the credit allocation as a transaction
     await UserCreditsModel.add(req.user!.id, 0, `Plan upgraded to ${plan} — credits reset to ${PLANS[plan].monthlyCredits === 999999 ? 'Unlimited' : PLANS[plan].monthlyCredits}`);
 
@@ -188,5 +199,30 @@ async function checkReferralForUser(userId: string) {
   );
   return r.rows[0] || null;
 }
+
+// GET /api/v2/subscriptions/payment-history
+router.get('/payment-history', authenticateUser, async (req: AuthRequest, res) => {
+  try {
+    const history = await PaymentHistoryModel.findByUser(req.user!.id);
+    res.json({
+      success: true,
+      data: {
+        payments: history.map((p: any) => ({
+          id: String(p.id),
+          reference: String(p.reference),
+          plan: String(p.plan),
+          billingCycle: String(p.billingCycle),
+          amount: Number(p.amount),
+          currency: String(p.currency),
+          status: String(p.status),
+          createdAt: String(p.createdAt),
+        })),
+        total: history.length,
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 export default router;

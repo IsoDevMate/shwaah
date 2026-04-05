@@ -88,6 +88,19 @@ export async function runV2Migrations() {
       commissionCredits INTEGER DEFAULT 0,
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (affiliateId) REFERENCES Affiliates(id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS PaymentHistory (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL,
+      reference TEXT NOT NULL,
+      plan TEXT NOT NULL,
+      billingCycle TEXT NOT NULL,
+      amount INTEGER NOT NULL,
+      currency TEXT DEFAULT 'KES',
+      status TEXT NOT NULL,
+      paystackCustomerId TEXT,
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (userId) REFERENCES Users(id)
     )`
   ];
 
@@ -255,5 +268,24 @@ export class AffiliateModel {
       'UPDATE Affiliates SET totalEarningsCredits = totalEarningsCredits + ? WHERE id = ?',
       [credits, affiliateId]
     );
+  }
+}
+
+export class PaymentHistoryModel {
+  static async record(data: { userId: string; reference: string; plan: string; billingCycle: string; amount: number; currency?: string; status: string; paystackCustomerId?: string }) {
+    const id = generateUUID();
+    await Database.execute(
+      'INSERT INTO PaymentHistory (id, userId, reference, plan, billingCycle, amount, currency, status, paystackCustomerId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, data.userId, data.reference, data.plan, data.billingCycle, data.amount, data.currency || 'KES', data.status, data.paystackCustomerId || null]
+    );
+    return id;
+  }
+
+  static async findByUser(userId: string) {
+    const r = await Database.execute(
+      'SELECT * FROM PaymentHistory WHERE userId = ? ORDER BY createdAt DESC',
+      [userId]
+    );
+    return r.rows;
   }
 }
