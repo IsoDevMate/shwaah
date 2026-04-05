@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import axios from 'axios';
 import { Post, SocialAccount, Analytics } from '../models/tursoModels';
 import { publishToSocial, refreshTokenIfNeeded } from './socialService';
 
@@ -260,19 +261,83 @@ const analyticsScheduler = cron.schedule('0 * * * *', async () => {
 
 async function updateAnalytics() {
   try {
-    const recentAnalytics = await Analytics.findRecent(1);
+    const recentAnalytics = await Analytics.findRecent(7);
     console.log(`[Analytics] Updating ${recentAnalytics.length} analytics records`);
-    
+
     for (const analytics of recentAnalytics) {
-      await Analytics.update(String(analytics.id), {
-        views: Number(analytics.views || 0) + Math.floor(Math.random() * 100),
-        likes: Number(analytics.likes || 0) + Math.floor(Math.random() * 20),
-        shares: Number(analytics.shares || 0) + Math.floor(Math.random() * 5),
-        comments: Number(analytics.comments || 0) + Math.floor(Math.random() * 10),
-        engagementRate: Math.random() * 10
-      });
+      try {
+        const postId = String(analytics.postId);
+        const platform = String(analytics.platform);
+        const userId = String(analytics.userId);
+
+        const post = await Post.findById(postId);
+        if (!post?.publishResults) continue;
+
+        const platformResult = post.publishResults[platform];
+        if (!platformResult?.success) continue;
+
+        const account = await SocialAccount.findByUserAndPlatforms(userId, [platform]);
+        if (!account?.length) continue;
+
+        const { decrypt } = await import('../utils/crypto');
+        const token = (() => { try { return decrypt(String(account[0].accessToken)); } catch { return String(account[0].accessToken); } })();
+
+        let metrics: { views: number; likes: number; shares: number; comments: number; engagementRate: number } | null = null;
+
+        if (platform === 'instagram') {
+          const mediaId = platformResult.data?.id;
+          if (mediaId) {
+            const res = await axios.get(`https://graph.instagram.com/${mediaId}/insights`, {
+              params: { metric: 'impressions,reach,likes,comments,shares', access_token: token }
+            }).catch(() => null);
+
+            if (res?.data?.data) {
+              const m: Record<string, number> = {};
+              res.data.data.forEach((d: any) => { m[d.name] = d.values?.[0]?.value ?? d.value ?? 0; });
+              const likes = m.likes ?? 0;
+              const comments = m.comments ?? 0;
+              const shares = m.shares ?? 0;
+              const reach = m.reach || m.impressions || 1;
+              metrics = {
+                views: m.impressions ?? m.reach ?? 0,
+                likes,
+                shares,
+                comments,
+                engagementRate: ((likes + comments + shares) / reach) * 100
+              };
+            }
+          }
+        }
+
+        if (platform === 'tiktok') {
+          // TikTok publish_id — metrics only available after video is posted from inbox
+          // Use user stats as a proxy since video-level metrics need video_id post-publish
+          const res = await axios.get('https://open.tiktokapis.com/v2/user/info/', {
+            params: { fields: 'follower_count,likes_count,video_count' },
+            headers: { Authorization: `Bearer ${token}` }
+          }).catch(() => null);
+
+          if (res?.data?.data?.user) {
+            const u = res.data.data.user;
+            metrics = {
+              views: u.video_count ?? 0,
+              likes: u.likes_count ?? 0,
+              shares: 0,
+              comments: 0,
+              engagementRate: u.follower_count > 0 ? (u.likes_count / u.follower_count) * 100 : 0
+            };
+          }
+        }
+
+        if (metrics) {
+          await Analytics.update(String(analytics.id), metrics);
+          console.log(`[Analytics] Updated ${platform} metrics for post ${postId}`);
+        }
+      } catch (err: any) {
+        console.warn(`[Analytics] Failed to update record ${analytics.id}:`, err.message);
+      }
     }
-    
+
     console.log('[Analytics] Update completed');
   } catch (error) {
     console.error('[Analytics] Failed to update analytics:', error);
