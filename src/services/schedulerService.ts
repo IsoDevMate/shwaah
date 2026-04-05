@@ -27,12 +27,11 @@ const postScheduler = cron.schedule('* * * * *', async () => {
 
     // Posts due now (already past their scheduled time)
     const duePosts = await Post.findScheduled(0);
-    // Posts coming up in the next 5 minutes (for visibility/pre-flight logging)
-    const upcomingPosts = await Post.findScheduled(5);
+    // Debug: show next upcoming post
+    const upcomingPosts = await Post.findScheduled(60);
     const soonPosts = upcomingPosts.filter(p => !duePosts.find(d => d.id === p.id));
-
     if (soonPosts.length > 0) {
-      console.log(`[Scheduler] Upcoming in next 5 min: ${soonPosts.map(p => `${p.id} @ ${p.scheduledAt}`).join(', ')}`);
+      console.log(`[Scheduler] Next scheduled: ${soonPosts[0].scheduledAt} (UTC now: ${now.toISOString()})`);
     }
 
     console.log(`[Scheduler] Found ${duePosts.length} posts to publish`);
