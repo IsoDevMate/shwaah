@@ -32,8 +32,8 @@ router.post('/create', authenticateUser, (req, res, next) => {
 
   const mediaUrls = files?.map(file => {
     const s3File = file as Express.MulterS3.File;
-    if (s3File.location) return s3File.location;
     if (process.env.R2_PUBLIC_URL && s3File.key) return `${process.env.R2_PUBLIC_URL}/${s3File.key}`;
+    if (s3File.location) return s3File.location;
     return null;
   }).filter(Boolean) as string[] || [];
   
