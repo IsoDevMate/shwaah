@@ -116,29 +116,72 @@ async function publishScheduledPost(post: any) {
     
     const publishResults: Record<string, any> = {};
     let hasSuccess = false;
+
+    // Split mixed media into images and videos for platforms that can't mix them
+    const allMediaUrls: string[] = post.mediaUrls || [];
+    const imageUrls = allMediaUrls.filter((u: string) => !/\.(mp4|mov|avi|mkv|webm)(\?|$)/i.test(u));
+    const videoUrls = allMediaUrls.filter((u: string) => /\.(mp4|mov|avi|mkv|webm)(\?|$)/i.test(u));
+    const hasMixedMedia = imageUrls.length > 0 && videoUrls.length > 0;
     
     for (const account of connectedAccounts) {
       try {
         console.log(`[Scheduler] Publishing to ${account.platform}...`);
         
         const refreshedAccount = await refreshTokenIfNeeded(account);
-        const mediaUrl = post.mediaUrls && post.mediaUrls.length > 0 ? post.mediaUrls[0] : undefined;
-        const mediaUrls = post.mediaUrls || [];
-        
-        const result = await publishToSocial(
-          account.platform as string, 
-          refreshedAccount.accessToken, 
-          post.content, 
-          mediaUrl,
-          mediaUrls
-        );
-        
-        publishResults[account.platform as string] = { 
-          success: true, 
-          data: result,
-          publishedAt: new Date().toISOString()
-        };
-        
+
+        // For Instagram and TikTok with mixed media, publish images and videos separately
+        if (hasMixedMedia && (account.platform === 'instagram' || account.platform === 'tiktok')) {
+          console.log(`[Scheduler] ${account.platform} - mixed media detected, splitting into ${imageUrls.length} images + ${videoUrls.length} videos`);
+          
+          const splitResults: any[] = [];
+
+          // Publish images first
+          if (imageUrls.length > 0) {
+            const imgResult = await publishToSocial(
+              account.platform as string,
+              refreshedAccount.accessToken,
+              post.content,
+              imageUrls[0],
+              imageUrls
+            );
+            splitResults.push({ type: 'images', data: imgResult });
+            console.log(`[Scheduler] ${account.platform} - images published`);
+          }
+
+          // Publish each video separately
+          for (const videoUrl of videoUrls) {
+            const vidResult = await publishToSocial(
+              account.platform as string,
+              refreshedAccount.accessToken,
+              post.content,
+              videoUrl,
+              [videoUrl]
+            );
+            splitResults.push({ type: 'video', data: vidResult });
+            console.log(`[Scheduler] ${account.platform} - video published`);
+          }
+
+          publishResults[account.platform as string] = {
+            success: true,
+            data: splitResults,
+            publishedAt: new Date().toISOString()
+          };
+        } else {
+          const mediaUrl = allMediaUrls.length > 0 ? allMediaUrls[0] : undefined;
+          const result = await publishToSocial(
+            account.platform as string,
+            refreshedAccount.accessToken,
+            post.content,
+            mediaUrl,
+            allMediaUrls
+          );
+          publishResults[account.platform as string] = {
+            success: true,
+            data: result,
+            publishedAt: new Date().toISOString()
+          };
+        }
+
         hasSuccess = true;
         
         await Analytics.create({
