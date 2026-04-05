@@ -182,8 +182,8 @@ export class Post {
 
   static async update(id: string, data: any) {
     await Database.execute(
-      'UPDATE Posts SET status = ?, publishResults = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
-      [data.status, JSON.stringify(data.publishResults), id]
+      'UPDATE Posts SET status = ?, publishResults = ?, scheduledAt = COALESCE(?, scheduledAt), updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
+      [data.status, JSON.stringify(data.publishResults), data.scheduledAt ?? null, id]
     );
   }
 

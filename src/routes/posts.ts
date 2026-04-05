@@ -282,14 +282,31 @@ router.get('/calendar', authenticateUser, async (req: AuthRequest, res) => {
 router.delete('/:postId', authenticateUser, async (req: AuthRequest, res) => {
   try {
     const { postId } = req.params;
-    
     const deleted = await Post.delete(postId, req.user!.id);
-    
-    if (!deleted) {
-      return res.status(404).json({ error: 'Post not found' });
-    }
-    
+    if (!deleted) return res.status(404).json({ error: 'Post not found' });
     res.json({ message: 'Post deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+// Reschedule a post (drag-drop)
+router.patch('/:postId/reschedule', authenticateUser, async (req: AuthRequest, res) => {
+  try {
+    const { postId } = req.params;
+    const { scheduledAt } = req.body;
+    if (!scheduledAt) return res.status(400).json({ error: 'scheduledAt required' });
+
+    const post = await Post.findById(postId);
+    if (!post || post.userId !== req.user!.id) return res.status(404).json({ error: 'Post not found' });
+    if (post.status === 'published') return res.status(400).json({ error: 'Cannot reschedule a published post' });
+
+    await Post.update(postId, {
+      ...post,
+      scheduledAt: new Date(scheduledAt).toISOString(),
+      status: 'scheduled'
+    });
+    res.json({ success: true, scheduledAt });
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }
