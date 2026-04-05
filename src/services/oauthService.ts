@@ -128,7 +128,7 @@ export async function getPlatformUserInfo(platform: string, accessToken: string,
   const userInfoUrls: Record<string, string> = {
     instagram: 'https://graph.instagram.com/me?fields=id,username',
     facebook: 'https://graph.facebook.com/me?fields=id,name',
-    linkedin: 'https://api.linkedin.com/v2/people/~?projection=(id,localizedFirstName,localizedLastName)',
+    linkedin: 'https://api.linkedin.com/v2/userinfo',
     youtube: 'https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true',
     tiktok: 'https://open.tiktokapis.com/v2/user/info/' // No query params in base URL
   };
@@ -191,8 +191,8 @@ export async function getPlatformUserInfo(platform: string, accessToken: string,
         return { id: response.data.id, name: response.data.name };
       case 'linkedin':
         return { 
-          id: response.data.id, 
-          name: `${response.data.localizedFirstName} ${response.data.localizedLastName}` 
+          id: response.data.sub, 
+          name: response.data.name || `${response.data.given_name} ${response.data.family_name}`
         };
       case 'youtube':
         const channel = response.data.items[0];
