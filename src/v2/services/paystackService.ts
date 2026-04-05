@@ -3,10 +3,10 @@ import crypto from 'crypto';
 import type { PaymentProvider, PaymentResult } from './paymentProvider';
 import { PLANS, type PlanId } from '../schemas';
 
-// KES amounts (Paystack uses smallest currency unit — KES kobo = cents)
+// KES amounts (Paystack uses smallest currency unit — KES = 100 units per shilling)
 const PLAN_PRICES_KES: Record<string, Record<string, number>> = {
-  creator: { monthly: 3800_00, yearly: 38000_00 },  // ~KES 3,800/mo, 38,000/yr
-  pro:     { monthly: 7700_00, yearly: 77000_00 },   // ~KES 7,700/mo, 77,000/yr
+  creator: { monthly: 5 * 100, yearly: 5 * 100 },   // KES 5 (test)
+  pro:     { monthly: 10 * 100, yearly: 10 * 100 },  // KES 10 (test)
 };
 
 export class PaystackProvider implements PaymentProvider {
