@@ -47,6 +47,88 @@ router.get('/accounts', authenticateUser, asyncHandler('Social', 'GetAccounts')(
   return sendSuccess(req, res, { accounts }, 'Connected accounts retrieved');
 }));
 
+// Fetch live profile metrics for all connected accounts
+router.get('/metrics', authenticateUser, asyncHandler('Social', 'GetMetrics')(async (req: AuthRequest, res) => {
+  const accounts = await SocialAccount.findByUser(req.user!.id);
+  const metrics: Record<string, any> = {};
+
+  await Promise.all(accounts.map(async (account: any) => {
+    const platform = String(account.platform);
+    const token = (() => { try { return decrypt(String(account.accessToken)); } catch { return String(account.accessToken); } })();
+
+    try {
+      if (platform === 'instagram') {
+        const r = await axios.get('https://graph.instagram.com/me', {
+          params: { fields: 'id,username,followers_count,follows_count,media_count,profile_picture_url', access_token: token }
+        });
+        metrics[platform] = {
+          username: r.data.username,
+          followers: r.data.followers_count ?? 0,
+          following: r.data.follows_count ?? 0,
+          posts: r.data.media_count ?? 0,
+          avatar: r.data.profile_picture_url ?? null,
+        };
+      }
+
+      if (platform === 'tiktok') {
+        const r = await axios.get('https://open.tiktokapis.com/v2/user/info/', {
+          params: { fields: 'display_name,avatar_url,follower_count,following_count,likes_count,video_count' },
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const u = r.data?.data?.user ?? {};
+        metrics[platform] = {
+          username: u.display_name ?? null,
+          followers: u.follower_count ?? 0,
+          following: u.following_count ?? 0,
+          likes: u.likes_count ?? 0,
+          posts: u.video_count ?? 0,
+          avatar: u.avatar_url ?? null,
+        };
+      }
+
+      if (platform === 'linkedin') {
+        const r = await axios.get('https://api.linkedin.com/v2/userinfo', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        metrics[platform] = {
+          username: r.data.name ?? null,
+          avatar: r.data.picture ?? null,
+        };
+      }
+
+      if (platform === 'youtube') {
+        const r = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
+          params: { part: 'snippet,statistics', mine: true },
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const ch = r.data?.items?.[0];
+        metrics[platform] = {
+          username: ch?.snippet?.title ?? null,
+          subscribers: Number(ch?.statistics?.subscriberCount ?? 0),
+          posts: Number(ch?.statistics?.videoCount ?? 0),
+          views: Number(ch?.statistics?.viewCount ?? 0),
+          avatar: ch?.snippet?.thumbnails?.default?.url ?? null,
+        };
+      }
+
+      if (platform === 'facebook') {
+        const r = await axios.get('https://graph.facebook.com/me', {
+          params: { fields: 'id,name,picture', access_token: token }
+        });
+        metrics[platform] = {
+          username: r.data.name ?? null,
+          avatar: r.data.picture?.data?.url ?? null,
+        };
+      }
+    } catch (err: any) {
+      console.warn(`[Metrics] Failed to fetch ${platform} metrics:`, err.response?.data?.error?.message || err.message);
+      metrics[platform] = { error: 'Could not fetch metrics' };
+    }
+  }));
+
+  return sendSuccess(req, res, { metrics }, 'Platform metrics retrieved');
+}));
+
 // Initiate OAuth flow
 router.get('/connect/:platform', authenticateUser, asyncHandler('Social', 'InitiateOAuth')(async (req: AuthRequest, res) => {
   const validation = connectSocialSchema.safeParse({ platform: req.params.platform });
