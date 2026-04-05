@@ -14,7 +14,7 @@ const PLATFORM_SCOPES: Record<string, string> = {
   instagram: 'instagram_business_basic,instagram_business_content_publish',
   facebook: 'pages_manage_posts,pages_read_engagement,publish_to_groups',
   linkedin: 'openid,email,profile,w_member_social',
-  youtube: 'https://www.googleapis.com/auth/youtube.upload',
+  youtube: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly',
   tiktok: 'user.info.basic,user.info.profile,user.info.stats,video.upload,video.list'
 };
 
