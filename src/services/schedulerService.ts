@@ -155,7 +155,7 @@ async function publishScheduledPost(post: any) {
           publishResults[account.platform as string] = { success: true, data: splitResults, publishedAt: new Date().toISOString() };
         } else {
           const mediaUrl = allMediaUrls.length > 0 ? allMediaUrls[0] : undefined;
-          const result = await publishToSocial(account.platform as string, refreshedAccount.accessToken, postContent, mediaUrl, allMediaUrls);
+          const result = await publishToSocial(account.platform as string, refreshedAccount.accessToken, postContent, mediaUrl, allMediaUrls, post.scheduledAt || undefined);
           publishResults[account.platform as string] = { success: true, data: result, publishedAt: new Date().toISOString() };
         }
 
@@ -315,6 +315,31 @@ async function updateAnalytics() {
               comments: 0,
               engagementRate: u.follower_count > 0 ? (u.likes_count / u.follower_count) * 100 : 0
             };
+          }
+        }
+
+        if (platform === 'youtube') {
+          const videoId = platformResult.data?.videoId || platformResult.data?.data?.id;
+          if (videoId) {
+            const res = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
+              params: { part: 'statistics', id: videoId },
+              headers: { Authorization: `Bearer ${token}` }
+            }).catch(() => null);
+            const stats = res?.data?.items?.[0]?.statistics;
+            if (stats) {
+              const views = Number(stats.viewCount ?? 0);
+              const likes = Number(stats.likeCount ?? 0);
+              const comments = Number(stats.commentCount ?? 0);
+              metrics = { views, likes, shares: Number(stats.favoriteCount ?? 0), comments, engagementRate: views > 0 ? ((likes + comments) / views) * 100 : 0 };
+            }
+          } else {
+            // Fallback: channel-level stats
+            const res = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
+              params: { part: 'statistics', mine: true },
+              headers: { Authorization: `Bearer ${token}` }
+            }).catch(() => null);
+            const stats = res?.data?.items?.[0]?.statistics;
+            if (stats) metrics = { views: Number(stats.viewCount ?? 0), likes: 0, shares: 0, comments: 0, engagementRate: 0 };
           }
         }
 

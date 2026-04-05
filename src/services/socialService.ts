@@ -290,36 +290,66 @@ const publishToLinkedIn = async (accessToken: string, content: string, mediaUrl?
   return response.data;
 };
 
-const publishToYouTube = async (accessToken: string, content: string, mediaUrl?: string): Promise<any> => {
-  if (!mediaUrl) {
-    throw new Error('YouTube requires video content');
-  }
-  
-  const config = PLATFORM_CONFIGS.youtube;
-  
-  const postData = {
-    snippet: {
-      title: content.substring(0, 100),
-      description: content,
-      tags: [],
-      categoryId: '22'
-    },
-    status: {
-      privacyStatus: 'public'
-    }
-  };
-  
-  const response = await axios.post(`${config.baseUrl}${config.postEndpoint}`, postData, {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    },
-    params: {
-      part: 'snippet,status'
-    }
+const publishToYouTube = async (accessToken: string, content: string, mediaUrl?: string, scheduledAt?: string): Promise<any> => {
+  if (!mediaUrl) throw new Error('YouTube requires video content');
+
+  // Fetch the video binary from R2/URL
+  const videoRes = await axios.get(mediaUrl, {
+    responseType: 'arraybuffer',
+    maxContentLength: Infinity,
+    maxBodyLength: Infinity,
+    timeout: 120000
   });
-  
-  return response.data;
+  const videoBuffer = Buffer.from(videoRes.data);
+  const contentType = mediaUrl.endsWith('.webm') ? 'video/webm' : 'video/mp4';
+
+  // Determine privacy — if scheduledAt provided, use 'private' + publishAt
+  const isScheduled = !!scheduledAt;
+  const statusObj: any = isScheduled
+    ? { privacyStatus: 'private', publishAt: new Date(scheduledAt!).toISOString() }
+    : { privacyStatus: 'public' };
+
+  // Step 1: Initiate resumable upload session
+  const initRes = await axios.post(
+    'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status',
+    {
+      snippet: {
+        title: content.substring(0, 100),
+        description: content,
+        tags: [],
+        categoryId: '22'
+      },
+      status: statusObj
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'X-Upload-Content-Type': contentType,
+        'X-Upload-Content-Length': videoBuffer.length
+      }
+    }
+  );
+
+  const uploadUrl = initRes.headers.location;
+  if (!uploadUrl) throw new Error('YouTube did not return an upload URL');
+
+  // Step 2: Upload video binary
+  const uploadRes = await axios.put(uploadUrl, videoBuffer, {
+    headers: {
+      'Content-Type': contentType,
+      'Content-Length': videoBuffer.length,
+      Authorization: `Bearer ${accessToken}`
+    },
+    maxContentLength: Infinity,
+    maxBodyLength: Infinity
+  });
+
+  return {
+    videoId: uploadRes.data.id,
+    status: isScheduled ? `Scheduled for ${scheduledAt}` : 'Published',
+    data: uploadRes.data
+  };
 };
 
 /**
@@ -560,7 +590,8 @@ export const publishToSocial = async (
   accessToken: string, 
   content: string, 
   mediaUrl?: string,
-  mediaUrls?: string[]
+  mediaUrls?: string[],
+  scheduledAt?: string
 ): Promise<any> => {
   console.log(`\n[${platform}] Starting publish process`);
   console.log(`[${platform}] Has media URL:`, !!mediaUrl);
@@ -585,7 +616,7 @@ export const publishToSocial = async (
         result = await publishToLinkedIn(decryptedToken, content, mediaUrl);
         break;
       case 'youtube':
-        result = await publishToYouTube(decryptedToken, content, mediaUrl);
+        result = await publishToYouTube(decryptedToken, content, mediaUrl, scheduledAt);
         break;
       case 'tiktok':
         result = await publishToTikTok(decryptedToken, content, mediaUrl);
