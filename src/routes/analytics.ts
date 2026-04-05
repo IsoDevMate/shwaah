@@ -11,12 +11,12 @@ router.get('/post/:postId', authenticateUser, async (req: AuthRequest, res) => {
   try {
     const { postId } = req.params;
     
-    const post = await Post.findById(parseInt(postId));
+    const post = await Post.findById(postId as any);
     if (!post || post.userId !== req.user!.id) {
       return res.status(404).json({ error: 'Post not found' });
     }
     
-    const analytics = await Analytics.findByPost(parseInt(postId));
+    const analytics = await Analytics.findByPost(postId as any);
     
     res.json({ 
       analytics,
@@ -35,12 +35,12 @@ router.get('/campaign/:campaignId', authenticateUser, async (req: AuthRequest, r
   try {
     const { campaignId } = req.params;
     
-    const campaign = await Campaign.findById(parseInt(campaignId));
+    const campaign = await Campaign.findById(campaignId as any);
     if (!campaign || campaign.userId !== req.user!.id) {
       return res.status(404).json({ error: 'Campaign not found' });
     }
     
-    const analytics = await Analytics.findByCampaign(parseInt(campaignId));
+    const analytics = await Analytics.findByCampaign(campaignId as any);
     
     // Aggregate metrics
     const totalViews = analytics.reduce((sum: number, a: any) => sum + a.views, 0);
