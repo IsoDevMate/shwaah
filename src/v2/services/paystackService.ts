@@ -56,14 +56,16 @@ export class PaystackProvider implements PaymentProvider {
   }
 
   async handleWebhook(payload: any, signature: string) {
+    const rawBody = typeof payload === 'string' ? payload : JSON.stringify(payload);
     const hash = crypto
       .createHmac('sha512', this.secretKey)
-      .update(JSON.stringify(payload))
+      .update(rawBody)
       .digest('hex');
 
     if (hash !== signature) throw new Error('Invalid webhook signature');
 
-    return { event: payload.event, data: payload.data };
+    const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
+    return { event: parsed.event, data: parsed.data };
   }
 }
 

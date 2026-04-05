@@ -62,8 +62,8 @@ router.get('/verify', authenticateUser, async (req: AuthRequest, res) => {
       billingCycle: result.billingCycle,
       currentPeriodStart: now.toISOString(),
       currentPeriodEnd: periodEnd.toISOString(),
-      paystackCustomerId: result.customerId,
-      paystackSubscriptionCode: result.subscriptionCode
+      paystackCustomerId: result.customerId || null,
+      paystackSubscriptionCode: result.subscriptionCode || null
     });
 
     await UserCreditsModel.upgradePlan(req.user!.id, plan);
@@ -83,10 +83,11 @@ router.get('/verify', authenticateUser, async (req: AuthRequest, res) => {
 });
 
 // POST /api/v2/subscriptions/webhook (Paystack webhook)
-router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+router.post('/webhook', async (req, res) => {
   try {
     const signature = req.headers['x-paystack-signature'] as string;
-    const payload = JSON.parse(req.body.toString());
+    // Body may already be parsed by express.json() or arrive as raw buffer
+    const payload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
     const { event, data } = await paymentProvider.handleWebhook(payload, signature);
 
     if (event === 'charge.success') {
@@ -99,7 +100,8 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
           billingCycle: billingCycle || 'monthly',
           currentPeriodStart: new Date().toISOString(),
           currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          paystackCustomerId: data.customer?.customer_code
+          paystackCustomerId: data.customer?.customer_code || null,
+          paystackSubscriptionCode: null
         });
       }
     }
@@ -107,7 +109,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     if (event === 'subscription.disable') {
       const userId = data.metadata?.userId;
       if (userId) {
-        await SubscriptionModel.upsert(userId, { plan: 'free', status: 'cancelled', billingCycle: 'monthly' });
+        await SubscriptionModel.upsert(userId, { plan: 'free', status: 'cancelled', billingCycle: 'monthly', currentPeriodStart: null, currentPeriodEnd: null, paystackCustomerId: null, paystackSubscriptionCode: null });
         await UserCreditsModel.upgradePlan(userId, 'free');
       }
     }
