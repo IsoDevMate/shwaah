@@ -16,25 +16,24 @@ export class PaystackProvider implements PaymentProvider {
   async initializePayment({ email, plan, billingCycle, userId, callbackUrl }: {
     email: string; plan: string; billingCycle: 'monthly' | 'yearly'; userId: string; callbackUrl: string;
   }) {
-    if (plan === 'free') throw new Error('Free plan requires no payment');
+    if (plan === 'free') throw new Error('Free plan requires no payment')
+    if (!this.secretKey) throw new Error('PAYSTACK_SECRET_KEY is not configured on the server')
 
-    const amount = PLAN_PRICES_KES[plan]?.[billingCycle];
-    if (!amount) throw new Error(`Invalid plan or billing cycle: ${plan}/${billingCycle}`);
+    const amount = PLAN_PRICES_KES[plan]?.[billingCycle]
+    if (!amount) throw new Error(`Invalid plan or billing cycle: ${plan}/${billingCycle}`)
 
-    const reference = `SHW-${userId.substring(0, 8)}-${Date.now()}`;
+    const reference = `SHW-${userId.substring(0, 8)}-${Date.now()}`
 
-    const res = await axios.post(`${this.baseUrl}/transaction/initialize`, {
-      email,
-      amount,
-      currency: 'KES',
-      reference,
-      callback_url: callbackUrl,
-      metadata: { userId, plan, billingCycle }
-    }, {
-      headers: { Authorization: `Bearer ${this.secretKey}` }
-    });
-
-    return { checkoutUrl: res.data.data.authorization_url, reference };
+    try {
+      const res = await axios.post(`${this.baseUrl}/transaction/initialize`, {
+        email, amount, currency: 'KES', reference, callback_url: callbackUrl,
+        metadata: { userId, plan, billingCycle }
+      }, { headers: { Authorization: `Bearer ${this.secretKey}` } })
+      return { checkoutUrl: res.data.data.authorization_url, reference }
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message
+      throw new Error(`Paystack error: ${msg}`)
+    }
   }
 
   async verifyPayment(reference: string): Promise<PaymentResult> {
