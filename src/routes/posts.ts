@@ -6,11 +6,12 @@ import { AuthRequest, PublishResult } from '../types';
 import { uploadToR2 } from '../utils/r2Storage';
 import { createPostSchema } from '../schemas';
 import { asyncHandler, sendSuccess, sendError } from '../utils/routeHelpers';
+import { creditGuard } from '../v2/guards/creditGuard';
 
 const router = express.Router();
 
 // Create post with multiple file uploads
-router.post('/create', authenticateUser, (req, res, next) => {
+router.post('/create', authenticateUser, creditGuard('publish_post'), (req, res, next) => {
   uploadToR2.array('media', 10)(req, res, (err) => {
     if (err) {
       console.error('[Posts] Multer error:', err);
@@ -74,6 +75,9 @@ router.post('/create', authenticateUser, (req, res, next) => {
   });
   
   console.log(`[Posts] Created post ${post.id} with status: ${status}${scheduledAt ? ` for ${scheduledAt}` : ''}`);
+
+  // Consume credit now that post is created
+  if ((req as any).consumeCredits) await (req as any).consumeCredits();
   
   return sendSuccess(req, res, {
     postId: post.id,

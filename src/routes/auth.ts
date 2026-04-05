@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { User } from '../models/tursoModels';
 import { asyncHandler, sendSuccess, sendError } from '../utils/routeHelpers';
 import { registerSchema, loginSchema } from '../schemas/auth';
+import { UserCreditsModel, AffiliateModel } from '../v2/schemas';
 
 const router = express.Router();
 
@@ -16,6 +17,7 @@ router.post('/register', asyncHandler('Auth', 'Register')(async (req, res) => {
   }
   
   const { email, password, name } = validation.data;
+  const { ref } = req.body; // referral code from ?ref= param
   
   const existingUser = await User.findByEmail(email);
   if (existingUser) {
@@ -24,18 +26,28 @@ router.post('/register', asyncHandler('Auth', 'Register')(async (req, res) => {
   
   const hashedPassword = await bcrypt.hash(password, 10);
   
-  const user = await User.create({
-    email,
-    password: hashedPassword,
-    name
-  });
+  const user = await User.create({ email, password: hashedPassword, name });
+
+  // Init free plan credits
+  await UserCreditsModel.initForUser(user.id, 'free');
+
+  // Record referral if ref code provided
+  if (ref) {
+    const affiliate = await AffiliateModel.findByCode(ref);
+    if (affiliate) {
+      await AffiliateModel.recordReferral(String(affiliate.id), user.id, ref);
+      // 4% bonus credits to affiliate for signup (before any payment)
+      const affiliateCredits = await UserCreditsModel.findByUser(String(affiliate.userId));
+      if (affiliateCredits) {
+        const bonus = Math.max(1, Math.floor(Number(affiliateCredits.creditsRemaining) * 0.04));
+        await UserCreditsModel.add(String(affiliate.userId), bonus, `Referral signup bonus from ${email}`);
+        await AffiliateModel.addEarnings(String(affiliate.id), bonus);
+      }
+    }
+  }
   
   return sendSuccess(req, res, {
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name
-    }
+    user: { id: user.id, email: user.email, name: user.name }
   }, 'User registered successfully', 201);
 }));
 

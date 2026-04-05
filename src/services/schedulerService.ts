@@ -385,4 +385,24 @@ export async function triggerSchedulerManually() {
 console.log('[Scheduler] ✅ Post scheduler initialized - running every minute');
 console.log('[Scheduler] ✅ Analytics scheduler initialized - running every hour');
 
+// Daily rollover check — runs at midnight UTC
+cron.schedule('0 0 * * *', async () => {
+  try {
+    const { Database } = await import('../models');
+    const { UserCreditsModel } = await import('../v2/schemas');
+    // Find all users whose cycle has ended
+    const expired = await Database.execute(
+      "SELECT userId FROM UserCredits WHERE cycleEnd <= datetime('now')"
+    );
+    for (const row of expired.rows) {
+      await UserCreditsModel.rollover(String(row.userId));
+    }
+    console.log(`[Rollover] Processed ${expired.rows.length} billing cycles`);
+  } catch (err: any) {
+    console.error('[Rollover] Error:', err.message);
+  }
+}, { timezone: 'UTC' });
+
+// Also init credits for new users on auth — handled lazily via ensureCredits
+
 export { publishScheduledPost, updateAnalytics, postScheduler, analyticsScheduler };

@@ -17,6 +17,12 @@ import analyticsRoutes from './routes/analytics';
 import webhookRoutes from './routes/webhooks';
 import notificationsRoutes from './routes/notifications';
 
+// V2 routes
+import subscriptionsRoutes from './v2/routes/subscriptions';
+import creditsRoutes from './v2/routes/credits';
+import affiliatesRoutes from './v2/routes/affiliates';
+import { runV2Migrations } from './v2/schemas';
+
 // Import scheduler
 import './services/schedulerService';
 import './services/logBackupService';
@@ -73,6 +79,11 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/notifications', notificationsRoutes);
 
+// V2 routes
+app.use('/api/v2/subscriptions', subscriptionsRoutes);
+app.use('/api/v2/credits', creditsRoutes);
+app.use('/api/v2/affiliates', affiliatesRoutes);
+
 // TikTok domain verification file
 app.get('/tiktok05xz8pArp9G3euBN7jvNzR9SwapksMVu.txt', (req, res) => {
   res.sendFile(path.join(__dirname, '../tiktok05xz8pArp9G3euBN7jvNzR9SwapksMVu.txt'));
@@ -126,6 +137,7 @@ async function startServer() {
   try {
     console.log('🔗 Connecting to Turso database...');
     await Database.init();
+    await runV2Migrations();
     console.log('✅ Database connection established successfully.');
     
     app.listen(PORT, () => {

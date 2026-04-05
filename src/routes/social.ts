@@ -7,6 +7,7 @@ import { AuthRequest, OAuthTokens, PlatformUserInfo } from '../types';
 import { asyncHandler, sendSuccess, sendError } from '../utils/routeHelpers';
 import { exchangeCodeForTokens, getPlatformUserInfo, exchangeForLongLivedToken } from '../services/oauthService';
 import { connectSocialSchema } from '../schemas';
+import { platformLimitMiddleware } from '../v2/guards/creditGuard';
 
 const router = express.Router();
 
@@ -130,7 +131,7 @@ router.get('/metrics', authenticateUser, asyncHandler('Social', 'GetMetrics')(as
 }));
 
 // Initiate OAuth flow
-router.get('/connect/:platform', authenticateUser, asyncHandler('Social', 'InitiateOAuth')(async (req: AuthRequest, res) => {
+router.get('/connect/:platform', authenticateUser, platformLimitMiddleware, asyncHandler('Social', 'InitiateOAuth')(async (req: AuthRequest, res) => {
   const validation = connectSocialSchema.safeParse({ platform: req.params.platform });
   if (!validation.success) {
     return sendError(req, res, new Error('Unsupported platform'), 'Invalid platform', 400, 'UNSUPPORTED_PLATFORM');
