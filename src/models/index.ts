@@ -157,7 +157,8 @@ export class Database {
   static async runMigrations() {
     const migrations = [
       { check: "SELECT platformContent FROM Posts LIMIT 1", alter: "ALTER TABLE Posts ADD COLUMN platformContent TEXT" },
-      { check: "SELECT read FROM Notifications LIMIT 1", alter: null }, // already in CREATE
+      { check: "SELECT balanceAfter FROM CreditTransactions LIMIT 1", alter: "ALTER TABLE CreditTransactions ADD COLUMN balanceAfter INTEGER" },
+      { check: "SELECT apiEndpoint FROM CreditTransactions LIMIT 1", alter: "ALTER TABLE CreditTransactions ADD COLUMN apiEndpoint TEXT" },
     ];
 
     for (const { check, alter } of migrations) {

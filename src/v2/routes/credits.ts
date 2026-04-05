@@ -11,10 +11,46 @@ router.get('/status', authenticateUser, async (req: AuthRequest, res) => {
   try {
     const credits = await ensureCredits(req.user!.id);
     const plan = credits.plan as keyof typeof PLANS;
+    const planConfig = PLANS[plan];
+    const isUnlimited = planConfig.monthlyCredits === 999999;
+
     res.json({
-      credits,
-      plan: PLANS[plan],
-      isUnlimited: PLANS[plan].monthlyCredits === 999999
+      success: true,
+      data: {
+        userId: req.user!.id,
+        currentPlan: plan,
+        credits: {
+          remaining: isUnlimited ? 'Unlimited' : Number(credits.creditsRemaining),
+          used: Number(credits.creditsUsedThisCycle),
+          rollover: Number(credits.rolloverCredits),
+          total: isUnlimited ? 'Unlimited' : planConfig.monthlyCredits,
+        },
+        platformLimits: planConfig.platformLimits,
+        features: planConfig.features,
+        nextResetDate: credits.cycleEnd,
+        isUnlimited,
+        // Legacy fields for backward compat
+        creditsRemaining: isUnlimited ? 999999 : Number(credits.creditsRemaining),
+        plan: planConfig,
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/v2/credits/platform-limits
+router.get('/platform-limits', authenticateUser, async (req: AuthRequest, res) => {
+  try {
+    const credits = await ensureCredits(req.user!.id);
+    const plan = credits.plan as keyof typeof PLANS;
+    res.json({
+      success: true,
+      data: {
+        currentPlan: plan,
+        platformLimits: PLANS[plan].platformLimits,
+        nextResetDate: credits.cycleEnd,
+      }
     });
   } catch (err: any) {
     res.status(500).json({ message: err.message });
@@ -24,8 +60,24 @@ router.get('/status', authenticateUser, async (req: AuthRequest, res) => {
 // GET /api/v2/credits/transactions
 router.get('/transactions', authenticateUser, async (req: AuthRequest, res) => {
   try {
-    const transactions = await UserCreditsModel.getTransactions(req.user!.id);
-    res.json({ transactions });
+    const limit = Math.min(Number(req.query.limit) || 50, 100);
+    const transactions = await UserCreditsModel.getTransactions(req.user!.id, limit);
+    res.json({
+      success: true,
+      data: {
+        transactions: transactions.map((t: any) => ({
+          id: String(t.id),
+          type: String(t.type),
+          amount: Number(t.amount),
+          description: String(t.description || ''),
+          balanceAfter: t.balanceAfter !== null ? Number(t.balanceAfter) : null,
+          apiEndpoint: t.apiEndpoint ? String(t.apiEndpoint) : null,
+          postId: t.postId ? String(t.postId) : null,
+          createdAt: String(t.createdAt),
+        })),
+        total: transactions.length,
+      }
+    });
   } catch (err: any) {
     res.status(500).json({ message: err.message });
   }
@@ -37,7 +89,7 @@ router.get('/plans', (req, res) => {
     id, ...p,
     monthlyCredits: p.monthlyCredits === 999999 ? 'Unlimited' : p.monthlyCredits
   }));
-  res.json({ plans });
+  res.json({ success: true, data: { plans } });
 });
 
 export default router;

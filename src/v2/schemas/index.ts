@@ -64,6 +64,8 @@ export async function runV2Migrations() {
       amount INTEGER NOT NULL,
       description TEXT,
       postId TEXT,
+      balanceAfter INTEGER,
+      apiEndpoint TEXT,
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (userId) REFERENCES Users(id)
     )`,
@@ -117,33 +119,36 @@ export class UserCreditsModel {
     return this.findByUser(userId);
   }
 
-  static async consume(userId: string, amount: number, description: string, postId?: string) {
+  static async consume(userId: string, amount: number, description: string, postId?: string, apiEndpoint?: string) {
     const credits = await this.findByUser(userId);
     if (!credits) throw new Error('No credits record found');
     const remaining = Number(credits.creditsRemaining);
     if (remaining < amount && Number(credits.plan === 'free' ? 1 : 0)) {
       throw new Error(`Insufficient credits. You have ${remaining} credits remaining.`);
     }
+    const balanceAfter = remaining - amount;
     await Database.execute(
       'UPDATE UserCredits SET creditsRemaining = creditsRemaining - ?, creditsUsedThisCycle = creditsUsedThisCycle + ?, updatedAt = CURRENT_TIMESTAMP WHERE userId = ?',
       [amount, amount, userId]
     );
     const txId = generateUUID();
     await Database.execute(
-      'INSERT INTO CreditTransactions (id, userId, type, amount, description, postId) VALUES (?, ?, ?, ?, ?, ?)',
-      [txId, userId, 'consume', -amount, description, postId || null]
+      'INSERT INTO CreditTransactions (id, userId, type, amount, description, postId, balanceAfter, apiEndpoint) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [txId, userId, 'consume', -amount, description, postId || null, balanceAfter, apiEndpoint || null]
     );
   }
 
   static async add(userId: string, amount: number, description: string) {
+    const credits = await this.findByUser(userId);
+    const balanceAfter = Number(credits?.creditsRemaining ?? 0) + amount;
     await Database.execute(
       'UPDATE UserCredits SET creditsRemaining = creditsRemaining + ?, updatedAt = CURRENT_TIMESTAMP WHERE userId = ?',
       [amount, userId]
     );
     const txId = generateUUID();
     await Database.execute(
-      'INSERT INTO CreditTransactions (id, userId, type, amount, description) VALUES (?, ?, ?, ?, ?)',
-      [txId, userId, 'add', amount, description]
+      'INSERT INTO CreditTransactions (id, userId, type, amount, description, balanceAfter) VALUES (?, ?, ?, ?, ?, ?)',
+      [txId, userId, 'add', amount, description, balanceAfter]
     );
   }
 

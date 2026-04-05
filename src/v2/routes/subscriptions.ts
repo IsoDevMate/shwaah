@@ -4,6 +4,9 @@ import { AuthRequest } from '../../types';
 import { paymentProvider } from '../services/paystackService';
 import { UserCreditsModel, SubscriptionModel, AffiliateModel, PLANS, type PlanId } from '../schemas';
 import { ensureCredits } from '../services/creditsService';
+import { sendReceiptEmail } from '../services/emailService';
+import { Notification } from '../../models/tursoModels';
+import { User } from '../../models/tursoModels';
 
 const router = express.Router();
 
@@ -53,6 +56,16 @@ router.get('/verify', authenticateUser, async (req: AuthRequest, res) => {
     if (!result.success) return res.status(400).json({ message: 'Payment not successful' });
 
     const plan = result.plan as PlanId;
+
+    // Guard: don't downgrade — only allow upgrade or same plan renewal
+    const currentCredits = await ensureCredits(req.user!.id);
+    const planOrder = ['free', 'creator', 'pro'];
+    const currentIdx = planOrder.indexOf(currentCredits.plan as string);
+    const newIdx = planOrder.indexOf(plan);
+    if (newIdx < currentIdx) {
+      return res.status(400).json({ message: `You are already on a higher plan (${currentCredits.plan}). Cannot downgrade via payment.` });
+    }
+
     const now = new Date();
     const periodEnd = new Date(now.getTime() + (result.billingCycle === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000);
 
@@ -67,16 +80,49 @@ router.get('/verify', authenticateUser, async (req: AuthRequest, res) => {
     });
 
     await UserCreditsModel.upgradePlan(req.user!.id, plan);
+    // Log the credit allocation as a transaction
+    await UserCreditsModel.add(req.user!.id, 0, `Plan upgraded to ${plan} — credits reset to ${PLANS[plan].monthlyCredits === 999999 ? 'Unlimited' : PLANS[plan].monthlyCredits}`);
 
-    // Affiliate commission — check if this user was referred
+    // In-app notification
+    await Notification.create({
+      userId: req.user!.id,
+      type: 'success',
+      title: `Upgraded to ${PLANS[plan].name} plan`,
+      message: `Your payment was successful. You now have ${PLANS[plan].monthlyCredits === 999999 ? 'unlimited' : PLANS[plan].monthlyCredits} credits.`,
+    });
+
+    // Affiliate commission
     const referral = await checkReferralForUser(req.user!.id);
     if (referral) {
-      const commissionCredits = Math.floor(result.amount * 0.10 / 100); // 10% of payment in credits
+      const commissionCredits = Math.max(1, Math.floor(result.amount * 0.10 / 100));
       await UserCreditsModel.add(String(referral.affiliateUserId), commissionCredits, `Referral commission from ${req.user!.email}`);
       await AffiliateModel.addEarnings(String(referral.affiliateId), commissionCredits);
     }
 
-    res.json({ success: true, plan, message: `Upgraded to ${plan} plan` });
+    // Send receipt email (non-blocking)
+    const user = await User.findById(req.user!.id);
+    sendReceiptEmail(req.user!.email, {
+      name: user?.name || req.user!.email,
+      plan,
+      amount: result.amount,
+      currency: 'KES',
+      reference: result.reference,
+      creditsAllocated: PLANS[plan].monthlyCredits,
+      billingCycle: result.billingCycle,
+      nextBillingDate: periodEnd.toLocaleDateString('en-KE', { year: 'numeric', month: 'long', day: 'numeric' }),
+    }).catch(e => console.warn('[Email] Receipt failed:', e.message));
+
+    const updatedCredits = await ensureCredits(req.user!.id);
+    res.json({
+      success: true,
+      plan,
+      message: `Upgraded to ${PLANS[plan].name} plan`,
+      credits: {
+        remaining: PLANS[plan].monthlyCredits === 999999 ? 'Unlimited' : Number(updatedCredits.creditsRemaining),
+        plan,
+        nextResetDate: periodEnd.toISOString(),
+      }
+    });
   } catch (err: any) {
     res.status(500).json({ message: err.message });
   }
