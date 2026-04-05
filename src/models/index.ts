@@ -146,9 +146,33 @@ export class Database {
     `);
 
     console.log('✅ Database tables initialized with UUID schema');
+
+    // Run migrations for columns added after initial deploy
+    await this.runMigrations();
     
     // Test R2 storage connection
     await this.testR2Connection();
+  }
+
+  static async runMigrations() {
+    const migrations = [
+      { check: "SELECT platformContent FROM Posts LIMIT 1", alter: "ALTER TABLE Posts ADD COLUMN platformContent TEXT" },
+      { check: "SELECT read FROM Notifications LIMIT 1", alter: null }, // already in CREATE
+    ];
+
+    for (const { check, alter } of migrations) {
+      if (!alter) continue;
+      try {
+        await this.execute(check);
+      } catch {
+        try {
+          await this.execute(alter);
+          console.log(`✅ Migration applied: ${alter}`);
+        } catch (e: any) {
+          console.warn(`Migration skipped (${alter}):`, e.message);
+        }
+      }
+    }
   }
 
   static async testR2Connection() {
