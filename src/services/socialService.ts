@@ -170,60 +170,123 @@ const publishToInstagram = async (accessToken: string, content: string, mediaUrl
 };
 
 const publishToFacebook = async (accessToken: string, content: string, mediaUrl?: string): Promise<any> => {
-  const config = PLATFORM_CONFIGS.facebook;
-  
-  const postData: any = {
+  if (mediaUrl && isVideo(mediaUrl)) {
+    // Video upload to Facebook
+    const response = await axios.post('https://graph-video.facebook.com/me/videos', {
+      description: content,
+      file_url: mediaUrl,
+      access_token: accessToken
+    });
+    return response.data;
+  }
+
+  if (mediaUrl && !isVideo(mediaUrl)) {
+    // Photo upload
+    const response = await axios.post('https://graph.facebook.com/me/photos', {
+      caption: content,
+      url: mediaUrl,
+      access_token: accessToken
+    });
+    return response.data;
+  }
+
+  // Text-only post
+  const response = await axios.post('https://graph.facebook.com/me/feed', {
     message: content,
     access_token: accessToken
-  };
-  
-  if (mediaUrl) {
-    postData.link = mediaUrl;
-  }
-  
-  const response = await axios.post(`${config.baseUrl}${config.postEndpoint}`, postData);
+  });
   return response.data;
 };
 
 const publishToLinkedIn = async (accessToken: string, content: string, mediaUrl?: string): Promise<any> => {
-  const config = PLATFORM_CONFIGS.linkedin;
-  
-  // Get user profile first
-  const profileResponse = await axios.get(`${config.baseUrl}${config.userEndpoint}`, {
-    headers: { 'Authorization': `Bearer ${accessToken}` }
+  // Get author URN from userinfo
+  const profileRes = await axios.get('https://api.linkedin.com/v2/userinfo', {
+    headers: { Authorization: `Bearer ${accessToken}` }
   });
-  
-  const postData: any = {
-    author: `urn:li:person:${profileResponse.data.id}`,
+  const authorUrn = `urn:li:person:${profileRes.data.sub}`;
+
+  // Text-only post
+  if (!mediaUrl) {
+    const response = await axios.post('https://api.linkedin.com/v2/ugcPosts', {
+      author: authorUrn,
+      lifecycleState: 'PUBLISHED',
+      specificContent: {
+        'com.linkedin.ugc.ShareContent': {
+          shareCommentary: { text: content },
+          shareMediaCategory: 'NONE'
+        }
+      },
+      visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' }
+    }, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } });
+    return response.data;
+  }
+
+  const mediaIsVideo = isVideo(mediaUrl);
+
+  if (mediaIsVideo) {
+    // Step 1: Register upload
+    const registerRes = await axios.post('https://api.linkedin.com/v2/assets?action=registerUpload', {
+      registerUploadRequest: {
+        recipes: ['urn:li:digitalmediaRecipe:feedshare-video'],
+        owner: authorUrn,
+        serviceRelationships: [{ relationshipType: 'OWNER', identifier: 'urn:li:userGeneratedContent' }]
+      }
+    }, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } });
+
+    const uploadUrl = registerRes.data.value.uploadMechanism['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'].uploadUrl;
+    const asset = registerRes.data.value.asset;
+
+    // Step 2: Fetch video and upload
+    const videoRes = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
+    await axios.put(uploadUrl, videoRes.data, {
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/octet-stream' }
+    });
+
+    // Step 3: Post with video asset
+    const response = await axios.post('https://api.linkedin.com/v2/ugcPosts', {
+      author: authorUrn,
+      lifecycleState: 'PUBLISHED',
+      specificContent: {
+        'com.linkedin.ugc.ShareContent': {
+          shareCommentary: { text: content },
+          shareMediaCategory: 'VIDEO',
+          media: [{ status: 'READY', media: asset }]
+        }
+      },
+      visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' }
+    }, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } });
+    return response.data;
+  }
+
+  // Image post — register upload
+  const registerRes = await axios.post('https://api.linkedin.com/v2/assets?action=registerUpload', {
+    registerUploadRequest: {
+      recipes: ['urn:li:digitalmediaRecipe:feedshare-image'],
+      owner: authorUrn,
+      serviceRelationships: [{ relationshipType: 'OWNER', identifier: 'urn:li:userGeneratedContent' }]
+    }
+  }, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } });
+
+  const uploadUrl = registerRes.data.value.uploadMechanism['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'].uploadUrl;
+  const asset = registerRes.data.value.asset;
+
+  const imgRes = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
+  await axios.put(uploadUrl, imgRes.data, {
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/octet-stream' }
+  });
+
+  const response = await axios.post('https://api.linkedin.com/v2/ugcPosts', {
+    author: authorUrn,
     lifecycleState: 'PUBLISHED',
     specificContent: {
       'com.linkedin.ugc.ShareContent': {
-        shareCommentary: {
-          text: content
-        },
-        shareMediaCategory: 'NONE'
+        shareCommentary: { text: content },
+        shareMediaCategory: 'IMAGE',
+        media: [{ status: 'READY', media: asset, title: { localized: { en_US: content.substring(0, 100) } } }]
       }
     },
-    visibility: {
-      'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC'
-    }
-  };
-  
-  if (mediaUrl) {
-    postData.specificContent['com.linkedin.ugc.ShareContent'].shareMediaCategory = 'IMAGE';
-    postData.specificContent['com.linkedin.ugc.ShareContent'].media = [{
-      status: 'READY',
-      originalUrl: mediaUrl
-    }];
-  }
-  
-  const response = await axios.post(`${config.baseUrl}${config.postEndpoint}`, postData, {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    }
-  });
-  
+    visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' }
+  }, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } });
   return response.data;
 };
 
