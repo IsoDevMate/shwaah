@@ -11,16 +11,16 @@ export const PLANS = {
   },
   creator: {
     name: 'Creator',
-    monthlyCredits: 999999, // unlimited
-    priceMonthly: 5,   // KES 5 (test)
+    monthlyCredits: 67,
+    priceMonthly: 5,
     priceYearly: 5,
     platformLimits: { instagram: 3, tiktok: 3, youtube: 2, linkedin: 1, facebook: 1 },
     features: { scheduling: true, maxScheduledPosts: 999999 }
   },
   pro: {
     name: 'Pro',
-    monthlyCredits: 999999,
-    priceMonthly: 10,  // KES 10 (test)
+    monthlyCredits: 150,
+    priceMonthly: 10,
     priceYearly: 10,
     platformLimits: { instagram: 5, tiktok: 5, youtube: 5, linkedin: 3, facebook: 3 },
     features: { scheduling: true, maxScheduledPosts: 999999 }

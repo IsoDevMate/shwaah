@@ -14,22 +14,18 @@ export async function ensureCredits(userId: string) {
 
 export async function checkCredits(userId: string, cost: number): Promise<{ allowed: boolean; remaining: number; reason?: string }> {
   const credits = await ensureCredits(userId);
-  const plan = credits.plan as PlanId;
   const remaining = Number(credits.creditsRemaining);
 
-  // Unlimited plans (creator/pro) always allowed
-  if (PLANS[plan].monthlyCredits === 999999) return { allowed: true, remaining };
-
   if (remaining < cost) {
-    return { allowed: false, remaining, reason: `Insufficient credits. You have ${remaining} left. Upgrade your plan to continue.` };
+    return {
+      allowed: false,
+      remaining,
+      reason: `Insufficient credits. You have ${remaining} credit${remaining === 1 ? '' : 's'} remaining. Upgrade your plan or wait for your next billing cycle.`
+    };
   }
   return { allowed: true, remaining };
 }
 
-export async function consumeCredits(userId: string, cost: number, description: string, postId?: string) {
-  const credits = await ensureCredits(userId);
-  const plan = credits.plan as PlanId;
-  // Unlimited plans don't deduct
-  if (PLANS[plan].monthlyCredits === 999999) return;
-  await UserCreditsModel.consume(userId, cost, description, postId);
+export async function consumeCredits(userId: string, cost: number, description: string, postId?: string, apiEndpoint?: string) {
+  await UserCreditsModel.consume(userId, cost, description, postId, apiEndpoint);
 }

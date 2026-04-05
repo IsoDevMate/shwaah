@@ -12,7 +12,6 @@ router.get('/status', authenticateUser, async (req: AuthRequest, res) => {
     const credits = await ensureCredits(req.user!.id);
     const plan = credits.plan as keyof typeof PLANS;
     const planConfig = PLANS[plan];
-    const isUnlimited = planConfig.monthlyCredits === 999999;
 
     res.json({
       success: true,
@@ -20,17 +19,16 @@ router.get('/status', authenticateUser, async (req: AuthRequest, res) => {
         userId: req.user!.id,
         currentPlan: plan,
         credits: {
-          remaining: isUnlimited ? 'Unlimited' : Number(credits.creditsRemaining),
+          remaining: Number(credits.creditsRemaining),
           used: Number(credits.creditsUsedThisCycle),
           rollover: Number(credits.rolloverCredits),
-          total: isUnlimited ? 'Unlimited' : planConfig.monthlyCredits,
+          total: planConfig.monthlyCredits,
         },
         platformLimits: planConfig.platformLimits,
         features: planConfig.features,
         nextResetDate: credits.cycleEnd,
-        isUnlimited,
-        // Legacy fields for backward compat
-        creditsRemaining: isUnlimited ? 999999 : Number(credits.creditsRemaining),
+        // Legacy fields
+        creditsRemaining: Number(credits.creditsRemaining),
         plan: planConfig,
       }
     });
