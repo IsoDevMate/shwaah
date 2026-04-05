@@ -67,8 +67,8 @@ export class SocialAccount {
 
   static async update(id: string, data: any) {
     await Database.execute(
-      'UPDATE SocialAccounts SET accessToken = ?, expiresAt = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
-      [data.accessToken, data.expiresAt, id]
+      'UPDATE SocialAccounts SET accessToken = ?, expiresAt = ?, isActive = COALESCE(?, isActive), updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
+      [data.accessToken, data.expiresAt, data.isActive ?? null, id]
     );
     return await this.findById(id);
   }

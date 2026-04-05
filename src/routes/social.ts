@@ -213,11 +213,20 @@ router.delete('/disconnect/:platform', authenticateUser, asyncHandler('Social', 
   if (!validation.success) {
     return sendError(req, res, new Error('Unsupported platform'), 'Invalid platform', 400, 'UNSUPPORTED_PLATFORM');
   }
-  
   const { platform } = validation.data;
   await SocialAccount.updateByUserAndPlatform(req.user!.id, platform, { isActive: false });
-  
   return sendSuccess(req, res, null, `${platform} disconnected successfully`);
+}));
+
+// Disconnect a specific account by ID
+router.delete('/disconnect-account/:accountId', authenticateUser, asyncHandler('Social', 'DisconnectAccount')(async (req: AuthRequest, res) => {
+  const { accountId } = req.params;
+  const account = await SocialAccount.findById(accountId);
+  if (!account || String(account.userId) !== req.user!.id) {
+    return sendError(req, res, new Error('Account not found'), 'Account not found', 404, 'NOT_FOUND');
+  }
+  await SocialAccount.update(accountId, { accessToken: String(account.accessToken), expiresAt: null, isActive: false });
+  return sendSuccess(req, res, null, 'Account disconnected');
 }));
 
 // Force reconnect (disconnect and get new auth URL)
