@@ -116,7 +116,7 @@ router.get('/callback/:platform', asyncHandler('Social', 'OAuthCallback')(async 
     });
     
     // Remove verbose logging
-    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3001'}/dashboard?connected=${platform}`);
+    res.redirect(`${process.env.FRONTEND_URL || 'https://shwaah-frontend-31fs.vercel.app'}/dashboard?connected=${platform}`);
   } catch (error: any) {
     console.error(`OAuth callback failed for ${platform}:`, error);
     console.error('Stack:', error.stack);
