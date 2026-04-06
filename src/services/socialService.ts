@@ -198,12 +198,32 @@ const publishToFacebook = async (accessToken: string, content: string, mediaUrl?
   return response.data;
 };
 
-const publishToLinkedIn = async (accessToken: string, content: string, mediaUrl?: string): Promise<any> => {
-  // Get author URN from userinfo
+const uploadLinkedInImage = async (accessToken: string, authorUrn: string, imageUrl: string): Promise<string> => {
+  const registerRes = await axios.post('https://api.linkedin.com/v2/assets?action=registerUpload', {
+    registerUploadRequest: {
+      recipes: ['urn:li:digitalmediaRecipe:feedshare-image'],
+      owner: authorUrn,
+      serviceRelationships: [{ relationshipType: 'OWNER', identifier: 'urn:li:userGeneratedContent' }]
+    }
+  }, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } });
+
+  const uploadUrl = registerRes.data.value.uploadMechanism['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'].uploadUrl;
+  const asset = registerRes.data.value.asset;
+
+  const imgRes = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+  await axios.put(uploadUrl, imgRes.data, {
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/octet-stream' }
+  });
+
+  return asset;
+};
+
+const publishToLinkedIn = async (accessToken: string, content: string, mediaUrl?: string, mediaUrls?: string[]): Promise<any> => {
   const profileRes = await axios.get('https://api.linkedin.com/v2/userinfo', {
     headers: { Authorization: `Bearer ${accessToken}` }
   });
   const authorUrn = `urn:li:person:${profileRes.data.sub}`;
+  const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
 
   // Text-only post
   if (!mediaUrl) {
@@ -217,32 +237,27 @@ const publishToLinkedIn = async (accessToken: string, content: string, mediaUrl?
         }
       },
       visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' }
-    }, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } });
+    }, { headers });
     return response.data;
   }
 
-  const mediaIsVideo = isVideo(mediaUrl);
-
-  if (mediaIsVideo) {
-    // Step 1: Register upload
+  if (isVideo(mediaUrl)) {
     const registerRes = await axios.post('https://api.linkedin.com/v2/assets?action=registerUpload', {
       registerUploadRequest: {
         recipes: ['urn:li:digitalmediaRecipe:feedshare-video'],
         owner: authorUrn,
         serviceRelationships: [{ relationshipType: 'OWNER', identifier: 'urn:li:userGeneratedContent' }]
       }
-    }, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } });
+    }, { headers });
 
     const uploadUrl = registerRes.data.value.uploadMechanism['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'].uploadUrl;
     const asset = registerRes.data.value.asset;
 
-    // Step 2: Fetch video and upload
     const videoRes = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
     await axios.put(uploadUrl, videoRes.data, {
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/octet-stream' }
     });
 
-    // Step 3: Post with video asset
     const response = await axios.post('https://api.linkedin.com/v2/ugcPosts', {
       author: authorUrn,
       lifecycleState: 'PUBLISHED',
@@ -254,26 +269,13 @@ const publishToLinkedIn = async (accessToken: string, content: string, mediaUrl?
         }
       },
       visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' }
-    }, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } });
+    }, { headers });
     return response.data;
   }
 
-  // Image post — register upload
-  const registerRes = await axios.post('https://api.linkedin.com/v2/assets?action=registerUpload', {
-    registerUploadRequest: {
-      recipes: ['urn:li:digitalmediaRecipe:feedshare-image'],
-      owner: authorUrn,
-      serviceRelationships: [{ relationshipType: 'OWNER', identifier: 'urn:li:userGeneratedContent' }]
-    }
-  }, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } });
-
-  const uploadUrl = registerRes.data.value.uploadMechanism['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'].uploadUrl;
-  const asset = registerRes.data.value.asset;
-
-  const imgRes = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
-  await axios.put(uploadUrl, imgRes.data, {
-    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/octet-stream' }
-  });
+  // Image(s) post — upload all images
+  const allImageUrls = (mediaUrls && mediaUrls.length > 1) ? mediaUrls : [mediaUrl];
+  const assets = await Promise.all(allImageUrls.map(url => uploadLinkedInImage(accessToken, authorUrn, url)));
 
   const response = await axios.post('https://api.linkedin.com/v2/ugcPosts', {
     author: authorUrn,
@@ -282,11 +284,11 @@ const publishToLinkedIn = async (accessToken: string, content: string, mediaUrl?
       'com.linkedin.ugc.ShareContent': {
         shareCommentary: { text: content },
         shareMediaCategory: 'IMAGE',
-        media: [{ status: 'READY', media: asset, title: { localized: { en_US: content.substring(0, 100) } } }]
+        media: assets.map(asset => ({ status: 'READY', media: asset, title: { localized: { en_US: content.substring(0, 100) } } }))
       }
     },
     visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' }
-  }, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } });
+  }, { headers });
   return response.data;
 };
 
@@ -613,7 +615,7 @@ export const publishToSocial = async (
         result = await publishToFacebook(decryptedToken, content, mediaUrl);
         break;
       case 'linkedin':
-        result = await publishToLinkedIn(decryptedToken, content, mediaUrl);
+        result = await publishToLinkedIn(decryptedToken, content, mediaUrl, mediaUrls);
         break;
       case 'youtube':
         result = await publishToYouTube(decryptedToken, content, mediaUrl, scheduledAt);
@@ -649,6 +651,30 @@ export const refreshTokenIfNeeded = async (socialAccount: any): Promise<any> => 
   }
 
   // If token is expired and we have a refresh token, try to refresh
+  if (isExpired && socialAccount.refreshToken && platform === 'youtube') {
+    console.log(`[Token Management] Attempting to refresh ${platform} token...`);
+    try {
+      const params = new URLSearchParams({
+        client_id: process.env.YOUTUBE_CLIENT_ID!,
+        client_secret: process.env.YOUTUBE_CLIENT_SECRET!,
+        refresh_token: safeDecrypt(socialAccount.refreshToken),
+        grant_type: 'refresh_token'
+      });
+      const res = await axios.post('https://oauth2.googleapis.com/token', params.toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      });
+      const updatedAccount = await SocialAccount.update(socialAccount.id, {
+        accessToken: encrypt(res.data.access_token),
+        expiresAt: new Date(Date.now() + res.data.expires_in * 1000).toISOString()
+      });
+      console.log(`[Token Management] ${platform} token refreshed successfully`);
+      return updatedAccount;
+    } catch (error: any) {
+      console.error(`[Token Management] Failed to refresh ${platform} token:`, error.message);
+      throw new Error(`YouTube token expired and refresh failed. Please reconnect your YouTube account.`);
+    }
+  }
+
   if (isExpired && socialAccount.refreshToken && platform === 'tiktok') {
     console.log(`[Token Management] Attempting to refresh ${platform} token...`);
     
