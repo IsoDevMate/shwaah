@@ -1,5 +1,4 @@
 import OpenAI from 'openai';
-import ffmpeg from 'fluent-ffmpeg';
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
@@ -36,42 +35,49 @@ export async function createGreenscreenMeme(
   caption: string,
   userId: string
 ): Promise<string> {
+  console.log(`[greenscreen] Starting for user=${userId} video=${videoUrl} bg=${backgroundUrl}`);
+
+  const ffmpeg = (await import('fluent-ffmpeg')).default;
+  const ffmpegPath = (await import('ffmpeg-static')).default;
+  if (!ffmpegPath) throw new Error('ffmpeg-static binary not found');
+  ffmpeg.setFfmpegPath(ffmpegPath);
+  console.log(`[greenscreen] Using ffmpeg at: ${ffmpegPath}`);
+
   const tmpDir = os.tmpdir();
   const videoPath = path.join(tmpDir, `gs_video_${Date.now()}.mp4`);
   const bgPath = path.join(tmpDir, `gs_bg_${Date.now()}.jpg`);
   const outputPath = path.join(tmpDir, `gs_out_${Date.now()}.mp4`);
 
-  // Download inputs
+  console.log(`[greenscreen] Downloading inputs...`);
   await downloadFile(videoUrl, videoPath);
   await downloadFile(backgroundUrl, bgPath);
+  console.log(`[greenscreen] Downloads complete, running ffmpeg...`);
 
   await new Promise<void>((resolve, reject) => {
     ffmpeg()
       .input(bgPath)
       .input(videoPath)
       .complexFilter([
-        // Scale background to match video size
         '[0:v]scale=1080:1920,setsar=1[bg]',
-        // Chroma key: remove green (0x00b140), similarity 0.3, blend 0.1
         '[1:v]scale=1080:1920,chromakey=0x00b140:0.3:0.1[fg]',
-        // Overlay fg on bg
         '[bg][fg]overlay=0:0[composited]',
-        // Draw caption text
         `[composited]drawtext=text='${caption.replace(/'/g, "\\'")}':fontsize=48:fontcolor=white:borderw=3:bordercolor=black:x=(w-text_w)/2:y=h-100[out]`
       ])
       .outputOptions(['-map [out]', '-map 1:a?', '-c:v libx264', '-c:a aac', '-shortest'])
       .output(outputPath)
-      .on('end', () => resolve())
-      .on('error', reject)
+      .on('start', (cmd: string) => console.log('[greenscreen] ffmpeg cmd:', cmd))
+      .on('stderr', (line: string) => console.log('[greenscreen] ffmpeg:', line))
+      .on('end', () => { console.log('[greenscreen] ffmpeg done'); resolve(); })
+      .on('error', (err: Error) => { console.error('[greenscreen] ffmpeg error:', err.message); reject(err); })
       .run();
   });
 
-  // Upload to R2
+  console.log(`[greenscreen] Uploading to R2...`);
   const fileBuffer = fs.readFileSync(outputPath);
   const fileName = `greenscreen_${userId}_${Date.now()}.mp4`;
   const r2Url = await uploadFileToR2(fileBuffer, fileName, 'video/mp4');
+  console.log(`[greenscreen] Done, url=${r2Url}`);
 
-  // Cleanup
   [videoPath, bgPath, outputPath].forEach(f => { try { fs.unlinkSync(f); } catch {} });
 
   return r2Url;

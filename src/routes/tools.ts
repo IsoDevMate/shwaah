@@ -111,6 +111,8 @@ router.post('/greenscreen', async (req: AuthRequest, res: Response) => {
     const outputUrl = await createGreenscreenMeme(videoUrl, backgroundUrl, caption, req.user!.id);
     res.json({ success: true, url: outputUrl });
   } catch (err: any) {
+    console.error('[POST /api/tools/greenscreen] Error:', err.message);
+    console.error(err.stack);
     res.status(500).json({ success: false, message: err.message });
   }
 });
