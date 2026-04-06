@@ -57,8 +57,8 @@ export async function createGreenscreenMeme(
     // drawtext requires libfreetype which ffmpeg-static doesn't include.
     // Build filter chain without it; caption is overlaid client-side or skipped.
     const filters = [
-      '[0:v]scale=1080:1920,setsar=1[bg]',
-      '[1:v]scale=1080:1920,chromakey=0x00b140:0.3:0.1[fg]',
+      '[0:v]scale=720:1280,setsar=1[bg]',
+      '[1:v]scale=720:1280,chromakey=0x00b140:0.3:0.1[fg]',
       '[bg][fg]overlay=0:0[out]',
     ];
 
@@ -66,7 +66,12 @@ export async function createGreenscreenMeme(
       .input(bgPath)
       .input(videoPath)
       .complexFilter(filters)
-      .outputOptions(['-map [out]', '-map 1:a?', '-c:v libx264', '-c:a aac', '-shortest'])
+      .outputOptions([
+        '-map [out]', '-map 1:a?',
+        '-c:v libx264', '-preset ultrafast', '-crf 28',
+        '-c:a aac', '-shortest',
+        '-threads 1',
+      ])
       .output(outputPath)
       .on('start', (cmd: string) => console.log('[greenscreen] ffmpeg cmd:', cmd))
       .on('stderr', (line: string) => console.log('[greenscreen] ffmpeg:', line))
