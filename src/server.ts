@@ -16,6 +16,7 @@ import campaignsRoutes from './routes/campaigns';
 import analyticsRoutes from './routes/analytics';
 import webhookRoutes from './routes/webhooks';
 import notificationsRoutes from './routes/notifications';
+import toolsRoutes from './routes/tools';
 
 // V2 routes
 import subscriptionsRoutes from './v2/routes/subscriptions';
@@ -78,6 +79,7 @@ app.use('/api/campaigns', campaignsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/tools', toolsRoutes);
 
 // V2 routes
 app.use('/api/v2/subscriptions', subscriptionsRoutes);

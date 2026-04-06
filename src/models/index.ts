@@ -147,6 +147,18 @@ export class Database {
 
     console.log('✅ Database tables initialized with UUID schema');
 
+    // Create tools tables
+    await this.execute(`
+      CREATE TABLE IF NOT EXISTS SavedHooks (
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        topic TEXT NOT NULL,
+        hook TEXT NOT NULL,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (userId) REFERENCES Users(id)
+      )
+    `);
+
     // Run migrations for columns added after initial deploy
     await this.runMigrations();
     
