@@ -198,27 +198,26 @@ const publishToFacebook = async (accessToken: string, content: string, mediaUrl?
   return response.data;
 };
 
-const uploadLinkedInImage = async (accessToken: string, authorUrn: string, imageUrl: string): Promise<string> => {
-  const headers = {
-    Authorization: `Bearer ${accessToken}`,
-    'Content-Type': 'application/json',
-    'LinkedIn-Version': '202304'
-  };
+const LI_HEADERS = (accessToken: string) => ({
+  Authorization: `Bearer ${accessToken}`,
+  'Content-Type': 'application/json',
+  'LinkedIn-Version': '202501',
+  'X-Restli-Protocol-Version': '2.0.0'
+});
 
-  // Step 1: Initialize upload
+const uploadLinkedInImage = async (accessToken: string, authorUrn: string, imageUrl: string): Promise<string> => {
   const initRes = await axios.post('https://api.linkedin.com/rest/images?action=initializeUpload', {
     initializeUploadRequest: { owner: authorUrn }
-  }, { headers });
+  }, { headers: LI_HEADERS(accessToken) });
 
   const { uploadUrl, image } = initRes.data.value;
 
-  // Step 2: Upload binary
   const imgRes = await axios.get(imageUrl, { responseType: 'arraybuffer' });
   await axios.put(uploadUrl, imgRes.data, {
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/octet-stream' }
   });
 
-  return image; // e.g. "urn:li:image:..."
+  return image;
 };
 
 const publishToLinkedIn = async (accessToken: string, content: string, mediaUrl?: string, mediaUrls?: string[]): Promise<any> => {
@@ -226,7 +225,7 @@ const publishToLinkedIn = async (accessToken: string, content: string, mediaUrl?
     headers: { Authorization: `Bearer ${accessToken}` }
   });
   const authorUrn = `urn:li:person:${profileRes.data.sub}`;
-  const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', 'LinkedIn-Version': '202304' };
+  const headers = LI_HEADERS(accessToken);
 
   // Text-only post
   if (!mediaUrl) {
