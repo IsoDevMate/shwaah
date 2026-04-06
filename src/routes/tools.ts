@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { authenticateUser } from '../middleware/auth';
 import { AuthRequest } from '../types';
 import { generateHooks, createGreenscreenMeme } from '../services/toolsService';
+import { uploadToR2 } from '../utils/r2Storage';
 import { db, generateUUID } from '../models';
 
 const router = Router();
@@ -74,6 +75,25 @@ router.delete('/hooks/:id', async (req: AuthRequest, res: Response) => {
       args: [req.params.id, req.user!.id]
     });
     res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /api/tools/upload — upload a file to R2, return its URL
+router.post('/upload', (req: AuthRequest, res: Response, next) => {
+  uploadToR2.single('media')(req, res, (err: any) => {
+    if (err) return res.status(400).json({ success: false, message: err.message });
+    next();
+  });
+}, async (req: AuthRequest, res: Response) => {
+  try {
+    const file = req.file as any;
+    if (!file) return res.status(400).json({ success: false, message: 'No file uploaded' });
+    const url = process.env.R2_PUBLIC_URL && file.key
+      ? `${process.env.R2_PUBLIC_URL}/${file.key}`
+      : file.location;
+    res.json({ success: true, url });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
