@@ -199,23 +199,26 @@ const publishToFacebook = async (accessToken: string, content: string, mediaUrl?
 };
 
 const uploadLinkedInImage = async (accessToken: string, authorUrn: string, imageUrl: string): Promise<string> => {
-  const registerRes = await axios.post('https://api.linkedin.com/v2/assets?action=registerUpload', {
-    registerUploadRequest: {
-      recipes: ['urn:li:digitalmediaRecipe:feedshare-image'],
-      owner: authorUrn,
-      serviceRelationships: [{ relationshipType: 'OWNER', identifier: 'urn:li:userGeneratedContent' }]
-    }
-  }, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } });
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+    'LinkedIn-Version': '202304'
+  };
 
-  const uploadUrl = registerRes.data.value.uploadMechanism['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'].uploadUrl;
-  const asset = registerRes.data.value.asset;
+  // Step 1: Initialize upload
+  const initRes = await axios.post('https://api.linkedin.com/rest/images?action=initializeUpload', {
+    initializeUploadRequest: { owner: authorUrn }
+  }, { headers });
 
+  const { uploadUrl, image } = initRes.data.value;
+
+  // Step 2: Upload binary
   const imgRes = await axios.get(imageUrl, { responseType: 'arraybuffer' });
   await axios.put(uploadUrl, imgRes.data, {
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/octet-stream' }
   });
 
-  return asset;
+  return image; // e.g. "urn:li:image:..."
 };
 
 const publishToLinkedIn = async (accessToken: string, content: string, mediaUrl?: string, mediaUrls?: string[]): Promise<any> => {
@@ -223,32 +226,29 @@ const publishToLinkedIn = async (accessToken: string, content: string, mediaUrl?
     headers: { Authorization: `Bearer ${accessToken}` }
   });
   const authorUrn = `urn:li:person:${profileRes.data.sub}`;
-  const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
+  const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', 'LinkedIn-Version': '202304' };
 
   // Text-only post
   if (!mediaUrl) {
-    const response = await axios.post('https://api.linkedin.com/v2/ugcPosts', {
+    const response = await axios.post('https://api.linkedin.com/rest/posts', {
       author: authorUrn,
       lifecycleState: 'PUBLISHED',
-      specificContent: {
-        'com.linkedin.ugc.ShareContent': {
-          shareCommentary: { text: content },
-          shareMediaCategory: 'NONE'
-        }
-      },
-      visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' }
+      visibility: 'PUBLIC',
+      commentary: content,
+      distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] }
     }, { headers });
     return response.data;
   }
 
   if (isVideo(mediaUrl)) {
+    // Video still uses legacy assets API — new video API requires different flow
     const registerRes = await axios.post('https://api.linkedin.com/v2/assets?action=registerUpload', {
       registerUploadRequest: {
         recipes: ['urn:li:digitalmediaRecipe:feedshare-video'],
         owner: authorUrn,
         serviceRelationships: [{ relationshipType: 'OWNER', identifier: 'urn:li:userGeneratedContent' }]
       }
-    }, { headers });
+    }, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } });
 
     const uploadUrl = registerRes.data.value.uploadMechanism['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'].uploadUrl;
     const asset = registerRes.data.value.asset;
@@ -269,25 +269,23 @@ const publishToLinkedIn = async (accessToken: string, content: string, mediaUrl?
         }
       },
       visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' }
-    }, { headers });
+    }, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } });
     return response.data;
   }
 
-  // Image(s) post — upload all images
+  // Image(s) — use new Images API
   const allImageUrls = (mediaUrls && mediaUrls.length > 1) ? mediaUrls : [mediaUrl];
-  const assets = await Promise.all(allImageUrls.map(url => uploadLinkedInImage(accessToken, authorUrn, url)));
+  const imageUrns = await Promise.all(allImageUrls.map(url => uploadLinkedInImage(accessToken, authorUrn, url)));
 
-  const response = await axios.post('https://api.linkedin.com/v2/ugcPosts', {
+  const response = await axios.post('https://api.linkedin.com/rest/posts', {
     author: authorUrn,
     lifecycleState: 'PUBLISHED',
-    specificContent: {
-      'com.linkedin.ugc.ShareContent': {
-        shareCommentary: { text: content },
-        shareMediaCategory: 'IMAGE',
-        media: assets.map(asset => ({ status: 'READY', media: asset, title: { localized: { en_US: content.substring(0, 100) } } }))
-      }
-    },
-    visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' }
+    visibility: 'PUBLIC',
+    commentary: content,
+    distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] },
+    content: imageUrns.length === 1
+      ? { media: { id: imageUrns[0] } }
+      : { multiImage: { images: imageUrns.map(urn => ({ id: urn, altText: '' })) } }
   }, { headers });
   return response.data;
 };
