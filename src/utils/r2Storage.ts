@@ -49,7 +49,7 @@ export const uploadFileToR2 = async (file: Buffer, fileName: string, contentType
     Body: file,
     ContentType: contentType
   }));
-  return `${process.env.R2_ENDPOINT}/${key}`;
+  return `${process.env.R2_PUBLIC_URL}/${key}`;
 };
 
 export const deleteFileFromR2 = async (fileUrl: string): Promise<void> => {

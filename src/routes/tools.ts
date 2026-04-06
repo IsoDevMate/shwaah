@@ -1,7 +1,8 @@
 import { Router, Response } from 'express';
 import { authenticateUser } from '../middleware/auth';
 import { AuthRequest } from '../types';
-import { generateHooks, createGreenscreenMeme } from '../services/toolsService';
+import { generateHooks } from '../services/toolsService';
+import { greenscreenQueue, getJobResult } from '../services/greenscreenQueue';
 import { uploadToR2 } from '../utils/r2Storage';
 import { db, generateUUID } from '../models';
 
@@ -99,22 +100,26 @@ router.post('/upload', (req: AuthRequest, res: Response, next) => {
   }
 });
 
-// POST /api/tools/greenscreen
-// Body: { videoUrl, backgroundUrl, caption }
+// POST /api/tools/greenscreen — enqueue job, return jobId immediately
 router.post('/greenscreen', async (req: AuthRequest, res: Response) => {
   try {
     const { videoUrl, backgroundUrl, caption = '' } = req.body;
     if (!videoUrl || !backgroundUrl) {
       return res.status(400).json({ success: false, message: 'videoUrl and backgroundUrl are required' });
     }
-
-    const outputUrl = await createGreenscreenMeme(videoUrl, backgroundUrl, caption, req.user!.id);
-    res.json({ success: true, url: outputUrl });
+    const job = await greenscreenQueue.add('process', { videoUrl, backgroundUrl, caption, userId: req.user!.id });
+    res.json({ success: true, jobId: job.id });
   } catch (err: any) {
     console.error('[POST /api/tools/greenscreen] Error:', err.message);
-    console.error(err.stack);
     res.status(500).json({ success: false, message: err.message });
   }
+});
+
+// GET /api/tools/greenscreen/status/:jobId — poll for result
+router.get('/greenscreen/status/:jobId', (req: AuthRequest, res: Response) => {
+  const result = getJobResult(req.params.jobId);
+  if (!result) return res.json({ success: true, status: 'processing' });
+  res.json({ success: true, ...result });
 });
 
 export default router;
