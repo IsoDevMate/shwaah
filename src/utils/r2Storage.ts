@@ -4,12 +4,11 @@ import multer from 'multer';
 import multerS3 from 'multer-s3';
 import { v4 as uuidv4 } from 'uuid';
 
-// Configure S3 client for Cloudflare R2
 const endpoint = process.env.R2_ENDPOINT?.replace('/marketingaddons', '');
 console.log('[R2] Endpoint:', endpoint ?? 'MISSING - using memoryStorage');
 console.log('[R2] Bucket:', process.env.R2_BUCKET_NAME ?? 'MISSING');
 
-export const s3Client = endpoint
+export const s3Client: S3Client | null = endpoint
   ? new S3Client({
       region: 'auto',
       endpoint,
@@ -20,7 +19,6 @@ export const s3Client = endpoint
     })
   : null;
 
-// Multer configuration for R2 upload
 export const uploadToR2 = multer({
   storage: s3Client && process.env.R2_BUCKET_NAME
     ? multerS3({
@@ -32,11 +30,8 @@ export const uploadToR2 = multer({
         contentType: multerS3.AUTO_CONTENT_TYPE
       })
     : multer.memoryStorage(),
-  limits: {
-    fileSize: 100 * 1024 * 1024 // 100MB limit
-  },
+  limits: { fileSize: 100 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    // Allow images and videos
     if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
       cb(null, true);
     } else {
@@ -45,55 +40,35 @@ export const uploadToR2 = multer({
   }
 });
 
-// Direct upload function
 export const uploadFileToR2 = async (file: Buffer, fileName: string, contentType: string): Promise<string> => {
+  if (!s3Client) throw new Error('R2 not configured');
   const key = `${Date.now()}-${uuidv4()}-${fileName}`;
-  
-  const command = new PutObjectCommand({
+  await s3Client.send(new PutObjectCommand({
     Bucket: process.env.R2_BUCKET_NAME!,
     Key: key,
     Body: file,
     ContentType: contentType
-  });
-  
-  await s3Client.send(command);
+  }));
   return `${process.env.R2_ENDPOINT}/${key}`;
 };
 
-// Delete file from R2
 export const deleteFileFromR2 = async (fileUrl: string): Promise<void> => {
+  if (!s3Client) return;
   const key = fileUrl.split('/').pop();
   if (!key) return;
-  
-  const command = new DeleteObjectCommand({
+  await s3Client.send(new DeleteObjectCommand({
     Bucket: process.env.R2_BUCKET_NAME!,
     Key: key
-  });
-  
-  await s3Client.send(command);
+  }));
 };
 
-// Generate signed URL for private access
 export const getSignedUrlForFile = async (fileUrl: string): Promise<string> => {
-  try {
-    console.log('[R2] Getting signed URL for:', fileUrl);
-    const key = fileUrl.split('/').pop();
-    if (!key) throw new Error('Invalid file URL - no key found');
-    
-    console.log('[R2] Extracted key:', key);
-    
-    const command = new GetObjectCommand({
-      Bucket: process.env.R2_BUCKET_NAME!,
-      Key: decodeURIComponent(key) // Decode URL-encoded characters
-    });
-    
-    const signedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
-    console.log('[R2] Generated signed URL successfully');
-    return signedUrl;
-  } catch (error) {
-    console.error('[R2] Error generating signed URL:', error);
-    throw error;
-  }
+  if (!s3Client) throw new Error('R2 not configured');
+  const key = fileUrl.split('/').pop();
+  if (!key) throw new Error('Invalid file URL - no key found');
+  const signedUrl = await getSignedUrl(s3Client, new GetObjectCommand({
+    Bucket: process.env.R2_BUCKET_NAME!,
+    Key: decodeURIComponent(key)
+  }), { expiresIn: 3600 });
+  return signedUrl;
 };
-
-export { s3Client };

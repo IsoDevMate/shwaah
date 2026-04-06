@@ -17,7 +17,7 @@ router.get('/plans', (req, res) => {
     name: p.name,
     priceMonthly: p.priceMonthly,
     priceYearly: p.priceYearly,
-    monthlyCredits: p.monthlyCredits === 999999 ? 'Unlimited' : p.monthlyCredits,
+    monthlyCredits: (p.monthlyCredits as number) === 999999 ? 'Unlimited' : p.monthlyCredits,
     platformLimits: p.platformLimits,
     features: p.features
   }));
@@ -92,14 +92,14 @@ router.get('/verify', authenticateUser, async (req: AuthRequest, res) => {
       paystackCustomerId: result.customerId || undefined,
     });
     // Log the credit allocation as a transaction
-    await UserCreditsModel.add(req.user!.id, 0, `Plan upgraded to ${plan} — credits reset to ${PLANS[plan].monthlyCredits === 999999 ? 'Unlimited' : PLANS[plan].monthlyCredits}`);
+    await UserCreditsModel.add(req.user!.id, 0, `Plan upgraded to ${plan} — credits reset to ${(PLANS[plan].monthlyCredits as number) === 999999 ? 'Unlimited' : PLANS[plan].monthlyCredits}`);
 
     // In-app notification
     await Notification.create({
       userId: req.user!.id,
       type: 'success',
       title: `Upgraded to ${PLANS[plan].name} plan`,
-      message: `Your payment was successful. You now have ${PLANS[plan].monthlyCredits === 999999 ? 'unlimited' : PLANS[plan].monthlyCredits} credits.`,
+      message: `Your payment was successful. You now have ${(PLANS[plan].monthlyCredits as number) === 999999 ? 'unlimited' : PLANS[plan].monthlyCredits} credits.`,
     });
 
     // Affiliate commission
@@ -129,7 +129,7 @@ router.get('/verify', authenticateUser, async (req: AuthRequest, res) => {
       plan,
       message: `Upgraded to ${PLANS[plan].name} plan`,
       credits: {
-        remaining: PLANS[plan].monthlyCredits === 999999 ? 'Unlimited' : Number(updatedCredits.creditsRemaining),
+        remaining: (PLANS[plan].monthlyCredits as number) === 999999 ? 'Unlimited' : Number(updatedCredits.creditsRemaining),
         plan,
         nextResetDate: periodEnd.toISOString(),
       }

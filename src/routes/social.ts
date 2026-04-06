@@ -20,17 +20,14 @@ const PLATFORM_SCOPES: Record<string, string> = {
   tiktok: 'user.info.basic,user.info.profile,user.info.stats,video.upload,video.list'
 };
 
-const getAuthUrl = (platform: string, userId: number): string => {
+const getAuthUrl = (platform: string, userId: string): string => {
   const clientId = process.env[`${platform.toUpperCase()}_CLIENT_ID`];
-  // Use hardcoded redirect URI for TikTok to ensure consistency
-  const redirectUri = platform === 'tiktok' 
+  const redirectUri = platform === 'tiktok'
     ? 'https://shwaah-8n4g.onrender.com/api/social/callback/tiktok'
-    : process.env[`${platform.toUpperCase()}_REDIRECT_URI`];
+    : (process.env[`${platform.toUpperCase()}_REDIRECT_URI`] ?? '');
   const scopes = PLATFORM_SCOPES[platform];
-  
-  if (!clientId) {
-    throw new Error(`Missing client ID for ${platform}`);
-  }
+
+  if (!clientId) throw new Error(`Missing client ID for ${platform}`);
   
   const authUrls: Record<string, string> = {
     instagram: `https://api.instagram.com/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scopes}&response_type=code&state=${userId}`,

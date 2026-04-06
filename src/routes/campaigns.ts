@@ -45,13 +45,13 @@ router.put('/:campaignId', authenticateUser, async (req: AuthRequest, res) => {
     const { campaignId } = req.params;
     const { name, description, startDate, endDate, status } = req.body;
     
-    const campaign = await Campaign.findById(parseInt(campaignId));
+    const campaign = await Campaign.findById(campaignId);
     
     if (!campaign || campaign.userId !== req.user!.id) {
       return res.status(404).json({ error: 'Campaign not found' });
     }
     
-    const updatedCampaign = await Campaign.update(parseInt(campaignId), {
+    const updatedCampaign = await Campaign.update(campaignId, {
       name,
       description,
       startDate: startDate ? new Date(startDate).toISOString() : undefined,
@@ -70,7 +70,7 @@ router.delete('/:campaignId', authenticateUser, async (req: AuthRequest, res) =>
   try {
     const { campaignId } = req.params;
     
-    const deleted = await Campaign.delete(parseInt(campaignId), req.user!.id);
+    const deleted = await Campaign.delete(campaignId, req.user!.id);
     
     if (!deleted) {
       return res.status(404).json({ error: 'Campaign not found' });

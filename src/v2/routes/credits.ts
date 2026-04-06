@@ -85,7 +85,7 @@ router.get('/transactions', authenticateUser, async (req: AuthRequest, res) => {
 router.get('/plans', (req, res) => {
   const plans = Object.entries(PLANS).map(([id, p]) => ({
     id, ...p,
-    monthlyCredits: p.monthlyCredits === 999999 ? 'Unlimited' : p.monthlyCredits
+    monthlyCredits: (p.monthlyCredits as number) === 999999 ? 'Unlimited' : p.monthlyCredits
   }));
   res.json({ success: true, data: { plans } });
 });
