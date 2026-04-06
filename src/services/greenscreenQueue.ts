@@ -2,7 +2,10 @@ import { Queue, Worker, Job } from 'bullmq';
 import IORedis from 'ioredis';
 import { createGreenscreenMeme } from './toolsService';
 
-const connection = new IORedis(process.env.REDIS_URL!, { maxRetriesPerRequest: null });
+const connection = new IORedis(process.env.REDIS_URL!, { 
+  maxRetriesPerRequest: null,
+  tls: {}
+});
 
 export const greenscreenQueue = new Queue('greenscreen', { connection });
 
