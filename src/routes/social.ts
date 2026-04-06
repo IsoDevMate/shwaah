@@ -4,7 +4,7 @@ import { SocialAccount } from '../models/tursoModels';
 import { authenticateUser } from '../middleware/auth';
 import { encrypt, decrypt } from '../utils/crypto';
 import { AuthRequest, OAuthTokens, PlatformUserInfo } from '../types';
-import { asyncHandler, sendSuccess, sendError } from '../utils/routeHelpers';
+import { refreshTokenIfNeeded } from '../services/socialService';
 import { exchangeCodeForTokens, getPlatformUserInfo, exchangeForLongLivedToken } from '../services/oauthService';
 import { connectSocialSchema } from '../schemas';
 import { platformLimitMiddleware } from '../v2/guards/creditGuard';
@@ -55,9 +55,11 @@ router.get('/metrics', authenticateUser, asyncHandler('Social', 'GetMetrics')(as
 
   await Promise.all(accounts.map(async (account: any) => {
     const platform = String(account.platform);
-    const token = (() => { try { return decrypt(String(account.accessToken)); } catch { return String(account.accessToken); } })();
 
     try {
+      // Refresh token if needed (handles YouTube + TikTok expiry)
+      const freshAccount = await refreshTokenIfNeeded(account).catch(() => account);
+      const token = (() => { try { return decrypt(String(freshAccount.accessToken)); } catch { return String(freshAccount.accessToken); } })();
       if (platform === 'instagram') {
         const r = await axios.get('https://graph.instagram.com/me', {
           params: { fields: 'id,username,followers_count,follows_count,media_count,profile_picture_url', access_token: token }
