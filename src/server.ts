@@ -24,6 +24,9 @@ import creditsRoutes from './v2/routes/credits';
 import affiliatesRoutes from './v2/routes/affiliates';
 import { runV2Migrations } from './v2/schemas';
 
+// V3 routes
+import socialV3Routes from './v3/routes/social';
+
 // Import scheduler
 import './services/schedulerService';
 import './services/logBackupService';
@@ -85,6 +88,9 @@ app.use('/api/tools', toolsRoutes);
 app.use('/api/v2/subscriptions', subscriptionsRoutes);
 app.use('/api/v2/credits', creditsRoutes);
 app.use('/api/v2/affiliates', affiliatesRoutes);
+
+// V3 routes
+app.use('/api/v3/social', socialV3Routes);
 
 // TikTok domain verification file
 app.get('/tiktok05xz8pArp9G3euBN7jvNzR9SwapksMVu.txt', (req, res) => {
