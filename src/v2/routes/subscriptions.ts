@@ -52,8 +52,37 @@ router.get('/verify', authenticateUser, async (req: AuthRequest, res) => {
     const { reference } = req.query;
     if (!reference) return res.status(400).json({ message: 'Reference required' });
 
+    // Idempotency: if we already recorded this payment successfully, don't re-process
+    const { Database } = await import('../../models');
+    const existing = await Database.execute(
+      'SELECT * FROM PaymentHistory WHERE reference = ? AND status = ?',
+      [reference as string, 'success']
+    );
+    if (existing.rows.length > 0) {
+      const updatedCredits = await ensureCredits(req.user!.id);
+      return res.json({
+        success: true,
+        plan: updatedCredits.plan,
+        message: 'Payment already processed',
+        credits: { remaining: Number(updatedCredits.creditsRemaining), plan: updatedCredits.plan }
+      });
+    }
+
     const result = await paymentProvider.verifyPayment(reference as string);
-    if (!result.success) return res.status(400).json({ message: 'Payment not successful' });
+    if (!result.success) {
+      // Record failed attempt so we can audit it
+      await PaymentHistoryModel.record({
+        userId: req.user!.id,
+        reference: result.reference,
+        plan: result.plan || 'unknown',
+        billingCycle: result.billingCycle || 'monthly',
+        amount: result.amount || 0,
+        currency: 'KES',
+        status: 'failed',
+        paystackCustomerId: result.customerId || undefined,
+      }).catch(() => {});
+      return res.status(400).json({ message: 'Payment not successful' });
+    }
 
     const plan = result.plan as PlanId;
 
@@ -80,6 +109,7 @@ router.get('/verify', authenticateUser, async (req: AuthRequest, res) => {
     });
 
     await UserCreditsModel.upgradePlan(req.user!.id, plan);
+
     // Record payment history
     await PaymentHistoryModel.record({
       userId: req.user!.id,
@@ -91,6 +121,7 @@ router.get('/verify', authenticateUser, async (req: AuthRequest, res) => {
       status: 'success',
       paystackCustomerId: result.customerId || undefined,
     });
+
     // Log the credit allocation as a transaction
     await UserCreditsModel.add(req.user!.id, 0, `Plan upgraded to ${plan} — credits reset to ${(PLANS[plan].monthlyCredits as number) === 999999 ? 'Unlimited' : PLANS[plan].monthlyCredits}`);
 
@@ -135,32 +166,62 @@ router.get('/verify', authenticateUser, async (req: AuthRequest, res) => {
       }
     });
   } catch (err: any) {
+    console.error('[Verify]', err.message);
     res.status(500).json({ message: err.message });
   }
 });
 
 // POST /api/v2/subscriptions/webhook (Paystack webhook)
 router.post('/webhook', async (req, res) => {
+  // Always respond 200 immediately so Paystack doesn't retry
+  res.sendStatus(200);
   try {
     const signature = req.headers['x-paystack-signature'] as string;
-    // Body may already be parsed by express.json() or arrive as raw buffer
     const payload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
     const { event, data } = await paymentProvider.handleWebhook(payload, signature);
 
     if (event === 'charge.success') {
       const { userId, plan, billingCycle } = data.metadata || {};
-      if (userId && plan) {
-        await UserCreditsModel.upgradePlan(userId, plan as PlanId);
-        await SubscriptionModel.upsert(userId, {
-          plan,
-          status: 'active',
-          billingCycle: billingCycle || 'monthly',
-          currentPeriodStart: new Date().toISOString(),
-          currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          paystackCustomerId: data.customer?.customer_code || null,
-          paystackSubscriptionCode: null
-        });
-      }
+      if (!userId || !plan) return;
+
+      // Idempotency: skip if already processed
+      const { Database } = await import('../../models');
+      const existing = await Database.execute(
+        'SELECT id FROM PaymentHistory WHERE reference = ? AND status = ?',
+        [data.reference, 'success']
+      );
+      if (existing.rows.length > 0) return;
+
+      const typedPlan = plan as PlanId;
+      const now = new Date();
+      const periodEnd = new Date(now.getTime() + (billingCycle === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000);
+
+      await UserCreditsModel.upgradePlan(userId, typedPlan);
+      await SubscriptionModel.upsert(userId, {
+        plan: typedPlan,
+        status: 'active',
+        billingCycle: billingCycle || 'monthly',
+        currentPeriodStart: now.toISOString(),
+        currentPeriodEnd: periodEnd.toISOString(),
+        paystackCustomerId: data.customer?.customer_code || null,
+        paystackSubscriptionCode: null
+      });
+      await PaymentHistoryModel.record({
+        userId,
+        reference: data.reference,
+        plan: typedPlan,
+        billingCycle: billingCycle || 'monthly',
+        amount: data.amount,
+        currency: 'KES',
+        status: 'success',
+        paystackCustomerId: data.customer?.customer_code || undefined,
+      });
+      await Notification.create({
+        userId,
+        type: 'success',
+        title: `Upgraded to ${PLANS[typedPlan].name} plan`,
+        message: `Payment confirmed. You now have ${PLANS[typedPlan].monthlyCredits} credits.`,
+      });
     }
 
     if (event === 'subscription.disable') {
@@ -168,13 +229,16 @@ router.post('/webhook', async (req, res) => {
       if (userId) {
         await SubscriptionModel.upsert(userId, { plan: 'free', status: 'cancelled', billingCycle: 'monthly', currentPeriodStart: null, currentPeriodEnd: null, paystackCustomerId: null, paystackSubscriptionCode: null });
         await UserCreditsModel.upgradePlan(userId, 'free');
+        await Notification.create({
+          userId,
+          type: 'info',
+          title: 'Subscription cancelled',
+          message: 'Your subscription has been cancelled. You have been moved to the free plan.',
+        });
       }
     }
-
-    res.sendStatus(200);
   } catch (err: any) {
     console.error('[Webhook]', err.message);
-    res.sendStatus(400);
   }
 });
 
@@ -221,6 +285,59 @@ router.get('/payment-history', authenticateUser, async (req: AuthRequest, res) =
       }
     });
   } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/v2/subscriptions/recover — user-triggered re-verify for missed callbacks
+router.post('/recover', authenticateUser, async (req: AuthRequest, res) => {
+  try {
+    const { reference } = req.body;
+    if (!reference) return res.status(400).json({ message: 'Reference required' });
+
+    // Check if already processed
+    const { Database } = await import('../../models');
+    const existing = await Database.execute(
+      'SELECT * FROM PaymentHistory WHERE reference = ? AND userId = ? AND status = ?',
+      [reference, req.user!.id, 'success']
+    );
+    if (existing.rows.length > 0) {
+      const credits = await ensureCredits(req.user!.id);
+      return res.json({ success: true, message: 'Already processed', plan: credits.plan });
+    }
+
+    // Re-verify with Paystack
+    const result = await paymentProvider.verifyPayment(reference);
+    if (!result.success) return res.status(400).json({ message: 'Payment not confirmed by Paystack' });
+
+    // Verify this reference belongs to this user via metadata
+    const plan = result.plan as PlanId;
+    if (!PLANS[plan]) return res.status(400).json({ message: 'Invalid plan in payment metadata' });
+
+    const now = new Date();
+    const periodEnd = new Date(now.getTime() + (result.billingCycle === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000);
+
+    await SubscriptionModel.upsert(req.user!.id, {
+      plan, status: 'active', billingCycle: result.billingCycle,
+      currentPeriodStart: now.toISOString(), currentPeriodEnd: periodEnd.toISOString(),
+      paystackCustomerId: result.customerId || null, paystackSubscriptionCode: null
+    });
+    await UserCreditsModel.upgradePlan(req.user!.id, plan);
+    await PaymentHistoryModel.record({
+      userId: req.user!.id, reference: result.reference, plan,
+      billingCycle: result.billingCycle, amount: result.amount,
+      currency: 'KES', status: 'success', paystackCustomerId: result.customerId || undefined,
+    });
+    await Notification.create({
+      userId: req.user!.id, type: 'success',
+      title: 'Payment recovered',
+      message: `Your ${PLANS[plan].name} plan has been activated after recovery.`,
+    });
+
+    const updatedCredits = await ensureCredits(req.user!.id);
+    res.json({ success: true, plan, message: `Plan recovered: ${PLANS[plan].name}`, credits: { remaining: Number(updatedCredits.creditsRemaining) } });
+  } catch (err: any) {
+    console.error('[Recover]', err.message);
     res.status(500).json({ message: err.message });
   }
 });
