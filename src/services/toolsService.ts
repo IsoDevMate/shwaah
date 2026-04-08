@@ -35,30 +35,25 @@ export async function createGreenscreenMeme(
   caption: string,
   userId: string
 ): Promise<string> {
-  console.log(`[greenscreen] Starting for user=${userId} video=${videoUrl} bg=${backgroundUrl}`);
+  console.log(`[greenscreen] Starting for user=${userId}`);
 
   const ffmpeg = (await import('fluent-ffmpeg')).default;
   const ffmpegPath = (await import('ffmpeg-static')).default;
   if (!ffmpegPath) throw new Error('ffmpeg-static binary not found');
   ffmpeg.setFfmpegPath(ffmpegPath);
-  console.log(`[greenscreen] Using ffmpeg at: ${ffmpegPath}`);
 
   const tmpDir = os.tmpdir();
   const videoPath = path.join(tmpDir, `gs_video_${Date.now()}.mp4`);
   const bgPath = path.join(tmpDir, `gs_bg_${Date.now()}.jpg`);
   const outputPath = path.join(tmpDir, `gs_out_${Date.now()}.mp4`);
 
-  console.log(`[greenscreen] Downloading inputs...`);
   await downloadFile(videoUrl, videoPath);
   await downloadFile(backgroundUrl, bgPath);
-  console.log(`[greenscreen] Downloads complete, running ffmpeg...`);
 
   await new Promise<void>((resolve, reject) => {
-    // drawtext requires libfreetype which ffmpeg-static doesn't include.
-    // Build filter chain without it; caption is overlaid client-side or skipped.
     const filters = [
-      '[0:v]scale=720:1280,setsar=1[bg]',
-      '[1:v]scale=720:1280,chromakey=0x00b140:0.3:0.1[fg]',
+      '[0:v]scale=480:854,setsar=1[bg]',
+      '[1:v]scale=480:854,chromakey=0x00b140:0.3:0.1[fg]',
       '[bg][fg]overlay=0:0[out]',
     ];
 
@@ -68,19 +63,16 @@ export async function createGreenscreenMeme(
       .complexFilter(filters)
       .outputOptions([
         '-map [out]', '-map 1:a?',
-        '-c:v libx264', '-preset ultrafast', '-crf 28',
+        '-c:v libx264', '-preset ultrafast', '-crf 30',
         '-c:a aac', '-shortest',
-        '-threads 1',
+        `-threads ${Math.max(2, os.cpus().length - 1)}`,
       ])
       .output(outputPath)
-      .on('start', (cmd: string) => console.log('[greenscreen] ffmpeg cmd:', cmd))
-      .on('stderr', (line: string) => console.log('[greenscreen] ffmpeg:', line))
       .on('end', () => { console.log('[greenscreen] ffmpeg done'); resolve(); })
       .on('error', (err: Error) => { console.error('[greenscreen] ffmpeg error:', err.message); reject(err); })
       .run();
   });
 
-  console.log(`[greenscreen] Uploading to R2...`);
   const fileBuffer = fs.readFileSync(outputPath);
   const fileName = `greenscreen_${userId}_${Date.now()}.mp4`;
   const r2Url = await uploadFileToR2(fileBuffer, fileName, 'video/mp4');
