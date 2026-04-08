@@ -3,6 +3,7 @@ import { authenticateUser } from '../middleware/auth';
 import { AuthRequest } from '../types';
 import { generateHooks, generateCaptions } from '../services/toolsService';
 import { greenscreenQueue, getJobResult } from '../services/greenscreenQueue';
+import { slideshowQueue, getSlideshowResult } from '../services/slideshowQueue';
 import { uploadToR2 } from '../utils/r2Storage';
 import { db, generateUUID } from '../models';
 import { creditGuard } from '../v2/guards/creditGuard';
@@ -134,6 +135,30 @@ router.post('/greenscreen', async (req: AuthRequest, res: Response) => {
 // GET /api/tools/greenscreen/status/:jobId — poll for result
 router.get('/greenscreen/status/:jobId', (req: AuthRequest, res: Response) => {
   const result = getJobResult(req.params.jobId);
+  if (!result) return res.json({ success: true, status: 'processing' });
+  res.json({ success: true, ...result });
+});
+
+// POST /api/tools/slideshow — enqueue slideshow job
+router.post('/slideshow', creditGuard('generate_slideshow'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { imageUrls, captions = [], transition = 'fade' } = req.body;
+    if (!Array.isArray(imageUrls) || imageUrls.length === 0) {
+      return res.status(400).json({ success: false, message: 'imageUrls array is required' });
+    }
+    const job = await slideshowQueue.add('process', {
+      imageUrls, captions, transition, userId: req.user!.id
+    });
+    await (req as any).consumeCredits(`${imageUrls.length} images`);
+    res.json({ success: true, jobId: job.id });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/tools/slideshow/status/:jobId
+router.get('/slideshow/status/:jobId', (req: AuthRequest, res: Response) => {
+  const result = getSlideshowResult(req.params.jobId);
   if (!result) return res.json({ success: true, status: 'processing' });
   res.json({ success: true, ...result });
 });

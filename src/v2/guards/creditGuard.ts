@@ -10,6 +10,7 @@ const ACTION_LABELS: Record<string, string> = {
   connect_account: 'Connected account',
   generate_hooks: 'Generated hooks',
   generate_caption: 'Generated captions & hashtags',
+  generate_slideshow: 'Generated slideshow',
 };
 
 // Deducts credits for post creation/publishing

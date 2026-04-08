@@ -30,6 +30,7 @@ import socialV3Routes from './v3/routes/social';
 // Import scheduler
 import './services/schedulerService';
 import './services/logBackupService';
+import './services/slideshowQueue';
 import { getSchedulerHealth } from './services/schedulerService';
 
 const app = express();
