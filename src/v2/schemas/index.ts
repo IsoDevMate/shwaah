@@ -101,6 +101,23 @@ export async function runV2Migrations() {
       paystackCustomerId TEXT,
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (userId) REFERENCES Users(id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS EmailOTP (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      otp TEXT NOT NULL,
+      expiresAt DATETIME NOT NULL,
+      verified INTEGER DEFAULT 0,
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS PasswordResetTokens (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      expiresAt DATETIME NOT NULL,
+      used INTEGER DEFAULT 0,
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (userId) REFERENCES Users(id)
     )`
   ];
 
