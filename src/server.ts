@@ -42,7 +42,8 @@ const PORT = process.env.PORT || 3000;
 };
 
 // Middleware
-app.use(cors({ origin: '*' }));
+app.use(cors({ origin: '*', methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'], allowedHeaders: ['Content-Type','Authorization'] }));
+app.options('*', cors());
 app.use((req, res, next) => {
   const contentType = req.headers['content-type'] || '';
   // Skip JSON parser for multipart requests
