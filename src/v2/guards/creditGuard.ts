@@ -4,6 +4,14 @@ import { PLANS, type PlanId } from '../schemas';
 import { SocialAccount } from '../../models/tursoModels';
 import { AuthRequest } from '../../types';
 
+const ACTION_LABELS: Record<string, string> = {
+  publish_post: 'Published post',
+  schedule_post: 'Scheduled post',
+  connect_account: 'Connected account',
+  generate_hooks: 'Generated hooks',
+  generate_caption: 'Generated captions & hashtags',
+};
+
 // Deducts credits for post creation/publishing
 export function creditGuard(action: keyof typeof CREDIT_COSTS) {
   return async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -15,7 +23,10 @@ export function creditGuard(action: keyof typeof CREDIT_COSTS) {
         return res.status(402).json({ success: false, message: reason, creditsRemaining: remaining, upgradeRequired: true });
       }
       // Attach consume function to req so route can call it after success
-      (req as any).consumeCredits = () => consumeCredits(userId, cost, action);
+      (req as any).consumeCredits = (extra?: string) => {
+        const desc = extra ? `${ACTION_LABELS[action] || action}: ${extra}` : (ACTION_LABELS[action] || action);
+        return consumeCredits(userId, cost, desc);
+      };
       next();
     } catch (err: any) {
       next(err);

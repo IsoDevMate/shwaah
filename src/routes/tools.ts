@@ -1,22 +1,38 @@
 import { Router, Response } from 'express';
 import { authenticateUser } from '../middleware/auth';
 import { AuthRequest } from '../types';
-import { generateHooks } from '../services/toolsService';
+import { generateHooks, generateCaptions } from '../services/toolsService';
 import { greenscreenQueue, getJobResult } from '../services/greenscreenQueue';
 import { uploadToR2 } from '../utils/r2Storage';
 import { db, generateUUID } from '../models';
+import { creditGuard } from '../v2/guards/creditGuard';
 
 const router = Router();
 router.use(authenticateUser);
 
 // POST /api/tools/hooks/generate
-router.post('/hooks/generate', async (req: AuthRequest, res: Response) => {
+router.post('/hooks/generate', creditGuard('generate_hooks'), async (req: AuthRequest, res: Response) => {
   try {
     const { topic, count = 5 } = req.body;
     if (!topic) return res.status(400).json({ success: false, message: 'topic is required' });
 
     const hooks = await generateHooks(topic, Math.min(Number(count), 10));
+    await (req as any).consumeCredits(topic);
     res.json({ success: true, hooks });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /api/tools/captions/generate
+router.post('/captions/generate', creditGuard('generate_caption'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { topic, platforms = ['instagram', 'tiktok', 'linkedin'] } = req.body;
+    if (!topic) return res.status(400).json({ success: false, message: 'topic is required' });
+
+    const result = await generateCaptions(topic, platforms);
+    await (req as any).consumeCredits(topic);
+    res.json({ success: true, ...result });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }

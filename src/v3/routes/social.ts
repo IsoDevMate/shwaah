@@ -72,6 +72,12 @@ router.get('/callback/:platform', asyncHandler('SocialV3', 'OAuthCallback')(asyn
   if (error) {
     return sendError(req, res, new Error(String(error_description || error)), 'OAuth authorization failed', 400, 'OAUTH_ERROR');
   }
+
+  // Meta verification ping — no code/state, just return 200
+  if (!code && !userId) {
+    return res.status(200).send('OK');
+  }
+
   if (!code || !userId) {
     return sendError(req, res, new Error('Missing code or state'), 'OAuth callback failed', 400, 'MISSING_OAUTH_PARAMS');
   }

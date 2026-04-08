@@ -96,7 +96,7 @@ router.post('/create', authenticateUser, creditGuard('publish_post'), (req, res,
 
   // Only deduct credits for immediate posts — scheduled posts deduct when they actually publish
   if (status !== 'scheduled' && (req as any).consumeCredits) {
-    await (req as any).consumeCredits();
+    await (req as any).consumeCredits(platforms.join(', '));
   }
   
   return sendSuccess(req, res, {

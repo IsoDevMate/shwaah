@@ -91,6 +91,25 @@ export async function createGreenscreenMeme(
   return r2Url;
 }
 
+export async function generateCaptions(topic: string, platforms: string[]): Promise<{ captions: Record<string, string>; hashtags: string[] }> {
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [
+      {
+        role: 'system',
+        content: 'You are a social media copywriter. Return ONLY valid JSON with keys "captions" (object mapping platform to caption string) and "hashtags" (array of hashtag strings without #).'
+      },
+      {
+        role: 'user',
+        content: `Write social media captions for the topic: "${topic}" for these platforms: ${platforms.join(', ')}. Also suggest 10 relevant hashtags. Return JSON.`
+      }
+    ],
+    response_format: { type: 'json_object' }
+  });
+  const raw = completion.choices[0].message.content || '{"captions":{},"hashtags":[]}';
+  return JSON.parse(raw);
+}
+
 async function downloadFile(url: string, dest: string): Promise<void> {
   const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 60000 });
   fs.writeFileSync(dest, Buffer.from(res.data));

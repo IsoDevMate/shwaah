@@ -637,9 +637,9 @@ export const refreshTokenIfNeeded = async (socialAccount: any): Promise<any> => 
   const platform = socialAccount.platform;
   console.log(`\n[Token Management] Checking token for ${platform}...`);
   
-  // Check if token is expired or about to expire (within 1 hour)
+  // Check if token is expired or about to expire (within 5 minutes)
   const isExpired = socialAccount.expiresAt && 
-    new Date(socialAccount.expiresAt).getTime() - Date.now() < 3600000;
+    new Date(socialAccount.expiresAt).getTime() - Date.now() < 300000;
 
   if (isExpired) {
     console.log(`[Token Management] ${platform} token is expired or expiring soon`);

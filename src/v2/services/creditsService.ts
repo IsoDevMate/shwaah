@@ -4,6 +4,8 @@ export const CREDIT_COSTS = {
   publish_post: 1,
   schedule_post: 1,
   connect_account: 1,
+  generate_hooks: 1,
+  generate_caption: 1,
 } as const;
 
 export async function ensureCredits(userId: string) {
