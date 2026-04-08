@@ -442,9 +442,8 @@ async function refreshTikTokToken(refreshToken: string): Promise<{ access_token:
   }
 }
 
-const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: string): Promise<any> => {
-  console.log('[tiktok] Starting publish process');
-  console.log('[tiktok] Has media URL:', !!mediaUrl);
+const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: string, publishMode: 'inbox' | 'direct' = 'inbox'): Promise<any> => {
+  console.log('[tiktok] Starting publish process, mode:', publishMode);
   
   if (!mediaUrl) {
     throw new Error('TikTok requires media content (photo or video).');
@@ -455,68 +454,61 @@ const publishToTikTok = async (accessToken: string, content: string, mediaUrl?: 
 
   try {
     if (mediaIsVideo) {
-      return await publishTikTokVideo(accessToken, content, mediaUrl);
+      return await publishTikTokVideo(accessToken, content, mediaUrl, publishMode);
     } else {
-      return await publishTikTokPhoto(accessToken, content, mediaUrl);
+      return await publishTikTokPhoto(accessToken, content, mediaUrl, publishMode);
     }
   } catch (error: any) {
     console.error('[TikTok] Publishing failed:', error.message);
-    console.error('[TikTok] Error details:', error.response?.data || error.code || error);
-    
     if (error.code === 'ETIMEDOUT' || error.code === 'ENETUNREACH') {
       throw new Error('Network timeout: Unable to connect to TikTok servers. Please try again.');
     }
-    
     if (error.response?.data?.error?.code === 'scope_not_authorized') {
       throw new Error('TikTok scope error: Please disconnect and reconnect your TikTok account.');
     }
-    
     throw error;
   }
 };
 
-const publishTikTokPhoto = async (accessToken: string, content: string, mediaUrl: string): Promise<any> => {
-  console.log('[TikTok] Publishing photo via MEDIA_UPLOAD...');
+const publishTikTokPhoto = async (accessToken: string, content: string, mediaUrl: string, publishMode: 'inbox' | 'direct' = 'inbox'): Promise<any> => {
+  console.log('[TikTok] Publishing photo, mode:', publishMode);
   
-  // Proxy through our own domain so TikTok can verify URL ownership
   const baseUrl = process.env.RENDER_EXTERNAL_URL || `https://shwaah-8n4g.onrender.com`;
   const proxiedUrl = `${baseUrl}/api/media/proxy?url=${encodeURIComponent(mediaUrl)}`;
-  console.log('[TikTok] Using proxied URL:', proxiedUrl);
-  
+
+  const postMode = publishMode === 'direct' ? 'DIRECT_POST' : 'MEDIA_UPLOAD';
+
   const response = await axios.post(
     'https://open.tiktokapis.com/v2/post/publish/content/init/',
     {
       post_info: {
         title: content.substring(0, 90),
-        description: content.substring(0, 4000)
+        description: content.substring(0, 4000),
+        ...(publishMode === 'direct' && { disable_duet: false, disable_comment: false, disable_stitch: false })
       },
       source_info: {
         source: 'PULL_FROM_URL',
         photo_cover_index: 0,
         photo_images: [proxiedUrl]
       },
-      post_mode: 'MEDIA_UPLOAD',
+      post_mode: postMode,
       media_type: 'PHOTO'
     },
-    {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json; charset=UTF-8'
-      }
-    }
+    { headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json; charset=UTF-8' } }
   );
 
-  console.log('[TikTok] Photo uploaded to inbox successfully');
-  
+  const isInbox = publishMode === 'inbox';
   return {
     publish_id: response.data.data.publish_id,
-    status: 'Uploaded to Inbox',
-    message: `Photo uploaded to TikTok inbox successfully! User needs to open TikTok app to review and post. Title: "${content.substring(0, 90)}"`
+    status: isInbox ? 'Uploaded to Inbox' : 'Published',
+    message: isInbox
+      ? `Photo uploaded to TikTok inbox. Open TikTok app to review and post.`
+      : `Photo published directly to TikTok.`
   };
 };
 
-const publishTikTokVideo = async (accessToken: string, content: string, mediaUrl: string): Promise<any> => {
-  console.log('[tiktok] Fetching video from R2...');
+const publishTikTokVideo = async (accessToken: string, content: string, mediaUrl: string, publishMode: 'inbox' | 'direct' = 'inbox'): Promise<any> => {
+  console.log('[tiktok] Publishing video, mode:', publishMode);
 
   // Alternative: PULL_FROM_URL (requires verified domain in TikTok dashboard)
   // const baseUrl = process.env.RENDER_EXTERNAL_URL || 'https://shwaah-8n4g.onrender.com';
@@ -555,10 +547,28 @@ const publishTikTokVideo = async (accessToken: string, content: string, mediaUrl
   console.log('[tiktok] Video fetched successfully, size:', videoBuffer.length, 'bytes');
   if (videoBuffer.length === 0) throw new Error('Video file is empty');
 
-  console.log('[TikTok] Initializing INBOX upload...');
+  console.log('[TikTok] Initializing upload...');
+  const initEndpoint = publishMode === 'direct'
+    ? 'https://open.tiktokapis.com/v2/post/publish/video/init/'
+    : 'https://open.tiktokapis.com/v2/post/publish/inbox/video/init/';
+
+  const initBody: any = publishMode === 'direct'
+    ? {
+        post_info: {
+          title: content.substring(0, 90),
+          description: content.substring(0, 4000),
+          privacy_level: 'PUBLIC_TO_EVERYONE',
+          disable_duet: false,
+          disable_comment: false,
+          disable_stitch: false,
+        },
+        source_info: { source: 'FILE_UPLOAD', video_size: videoBuffer.length, chunk_size: videoBuffer.length, total_chunk_count: 1 }
+      }
+    : { source_info: { source: 'FILE_UPLOAD', video_size: videoBuffer.length, chunk_size: videoBuffer.length, total_chunk_count: 1 } };
+
   const initResponse = await axios.post(
-    'https://open.tiktokapis.com/v2/post/publish/inbox/video/init/',
-    { source_info: { source: 'FILE_UPLOAD', video_size: videoBuffer.length, chunk_size: videoBuffer.length, total_chunk_count: 1 } },
+    initEndpoint,
+    initBody,
     { headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json; charset=UTF-8' } }
   );
 
@@ -576,11 +586,13 @@ const publishTikTokVideo = async (accessToken: string, content: string, mediaUrl
     maxBodyLength: Infinity
   });
 
-  console.log('[TikTok] Video uploaded successfully to inbox!');
+  console.log('[TikTok] Video uploaded successfully!');
   return {
     publish_id,
-    status: 'Uploaded to Inbox',
-    message: `Video uploaded to TikTok inbox successfully! User needs to open TikTok app to review and post the video. Title suggestion: "${content.substring(0, 100)}"`
+    status: publishMode === 'inbox' ? 'Uploaded to Inbox' : 'Published',
+    message: publishMode === 'inbox'
+      ? `Video uploaded to TikTok inbox. Open TikTok app to review and post.`
+      : `Video published directly to TikTok.`
   };
 };
 
@@ -590,7 +602,8 @@ export const publishToSocial = async (
   content: string, 
   mediaUrl?: string,
   mediaUrls?: string[],
-  scheduledAt?: string
+  scheduledAt?: string,
+  tiktokMode: 'inbox' | 'direct' = 'inbox'
 ): Promise<any> => {
   console.log(`\n[${platform}] Starting publish process`);
   console.log(`[${platform}] Has media URL:`, !!mediaUrl);
@@ -618,7 +631,7 @@ export const publishToSocial = async (
         result = await publishToYouTube(decryptedToken, content, mediaUrl, scheduledAt);
         break;
       case 'tiktok':
-        result = await publishToTikTok(decryptedToken, content, mediaUrl);
+        result = await publishToTikTok(decryptedToken, content, mediaUrl, tiktokMode);
         break;
       default:
         throw new Error(`Unsupported platform: ${platform}`);

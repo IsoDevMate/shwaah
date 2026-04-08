@@ -157,7 +157,10 @@ async function publishScheduledPost(post: any) {
           publishResults[account.platform as string] = { success: true, data: splitResults, publishedAt: new Date().toISOString() };
         } else {
           const mediaUrl = allMediaUrls.length > 0 ? allMediaUrls[0] : undefined;
-          const result = await publishToSocial(account.platform as string, refreshedAccount.accessToken, postContent, mediaUrl, allMediaUrls, post.scheduledAt || undefined);
+          const tiktokMode = account.platform === 'tiktok'
+            ? (post.platformContent?.tiktok?.publishMode || 'inbox')
+            : 'inbox';
+          const result = await publishToSocial(account.platform as string, refreshedAccount.accessToken, postContent, mediaUrl, allMediaUrls, post.scheduledAt || undefined, tiktokMode);
           publishResults[account.platform as string] = { success: true, data: result, publishedAt: new Date().toISOString() };
         }
 

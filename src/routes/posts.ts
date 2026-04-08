@@ -32,6 +32,12 @@ router.post('/create', authenticateUser, creditGuard('publish_post'), (req, res,
   }
   
   const { content, platforms, scheduledAt, campaignId, platformContent } = validation.data;
+  const tiktokMode: 'inbox' | 'direct' = req.body.tiktokMode === 'direct' ? 'direct' : 'inbox';
+
+  // Merge tiktokMode into platformContent so scheduler can read it too
+  const mergedPlatformContent = platforms.includes('tiktok')
+    ? { ...(platformContent || {}), tiktok: { ...(platformContent?.tiktok || {}), publishMode: tiktokMode } }
+    : platformContent ?? null;
   const files = req.files as (Express.MulterS3.File | Express.Multer.File)[];
 
   const mediaUrls = files?.map(file => {
@@ -86,7 +92,7 @@ router.post('/create', authenticateUser, creditGuard('publish_post'), (req, res,
     content,
     mediaUrls,
     platforms,
-    platformContent: platformContent ?? null,
+    platformContent: mergedPlatformContent,
     status,
     scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
     campaignId: campaignId || null
@@ -172,7 +178,11 @@ router.post('/publish/:postId', authenticateUser, async (req: AuthRequest, res) 
           refreshedAccount.accessToken, 
           postContent, 
           mediaUrl,
-          mediaUrls
+          mediaUrls,
+          undefined,
+          account.platform === 'tiktok'
+            ? (post.platformContent?.tiktok?.publishMode || req.body.tiktokMode || 'inbox')
+            : 'inbox'
         );
         
         publishResults[account.platform] = {
