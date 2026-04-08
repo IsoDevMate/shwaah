@@ -181,7 +181,7 @@ router.post('/publish/:postId', authenticateUser, async (req: AuthRequest, res) 
           mediaUrls,
           undefined,
           account.platform === 'tiktok'
-            ? (post.platformContent?.tiktok?.publishMode || req.body.tiktokMode || 'inbox')
+            ? ((post.platformContent as any)?.tiktok?.publishMode || req.body.tiktokMode || 'inbox')
             : 'inbox'
         );
         
