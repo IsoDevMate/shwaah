@@ -104,6 +104,27 @@ export async function generateCaptions(topic: string, platforms: string[]): Prom
 
 export type SlideshowTransition = 'fade' | 'slide' | 'zoom' | 'none';
 
+// Burns caption text onto an image using sharp (no libfreetype needed)
+async function addCaptionToImage(imgPath: string, caption: string, outPath: string): Promise<void> {
+  const sharp = (await import('sharp')).default;
+  const W = 480, H = 854;
+
+  // Create a semi-transparent black bar as SVG with text
+  const safeCaption = caption.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const svgOverlay = Buffer.from(`
+    <svg width="${W}" height="${H}">
+      <rect x="0" y="${H - 100}" width="${W}" height="100" fill="rgba(0,0,0,0.55)" rx="0"/>
+      <text x="${W / 2}" y="${H - 38}" font-size="22" fill="white" text-anchor="middle"
+        font-family="Arial, sans-serif" font-weight="bold">${safeCaption}</text>
+    </svg>`);
+
+  await sharp(imgPath)
+    .resize(W, H, { fit: 'cover' })
+    .composite([{ input: svgOverlay, top: 0, left: 0 }])
+    .jpeg({ quality: 85 })
+    .toFile(outPath);
+}
+
 export async function createSlideshow(
   imageUrls: string[],
   captions: string[],
@@ -120,77 +141,64 @@ export async function createSlideshow(
   const tmpDir = os.tmpdir();
   const tag = `${userId}_${Date.now()}`;
 
-  // Download all images
+  // Download all images and composite captions via sharp
   const imgPaths: string[] = [];
   for (let i = 0; i < imageUrls.length; i++) {
-    const p = path.join(tmpDir, `slide_${tag}_${i}.jpg`);
-    await downloadFile(imageUrls[i], p);
-    imgPaths.push(p);
+    const raw = path.join(tmpDir, `slide_raw_${tag}_${i}.jpg`);
+    await downloadFile(imageUrls[i], raw);
+    const caption = (captions[i] || '').trim();
+    if (caption) {
+      const captioned = path.join(tmpDir, `slide_${tag}_${i}.jpg`);
+      await addCaptionToImage(raw, caption, captioned);
+      fs.unlinkSync(raw);
+      imgPaths.push(captioned);
+    } else {
+      imgPaths.push(raw);
+    }
   }
 
   const outputPath = path.join(tmpDir, `slideshow_${tag}.mp4`);
-  const slideDuration = 3; // seconds per slide
+  const slideDuration = 3;
   const W = 480, H = 854;
   const fps = 25;
   const threads = Math.max(2, os.cpus().length - 1);
 
   await new Promise<void>((resolve, reject) => {
     const cmd = ffmpeg();
-
-    // Each image as a looped input for slideDuration seconds
-    imgPaths.forEach(p => {
-      cmd.input(p).inputOptions([`-loop 1`, `-t ${slideDuration}`]);
-    });
+    imgPaths.forEach(p => cmd.input(p).inputOptions([`-loop 1`, `-t ${slideDuration}`]));
 
     const n = imgPaths.length;
     const filterParts: string[] = [];
     const scaledLabels: string[] = [];
 
-    // Scale + pad each image, optionally add caption
+    // Scale each image (caption already burned in by sharp)
     imgPaths.forEach((_, i) => {
-      const caption = (captions[i] || '').replace(/'/g, "\\'").replace(/:/g, '\\:');
-      const base = `[${i}:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps}`;
       const label = `[v${i}]`;
-      if (caption) {
-        filterParts.push(
-          `${base},drawtext=text='${caption}':fontsize=28:fontcolor=white:borderw=2:bordercolor=black:x=(w-text_w)/2:y=h-80${label}`
-        );
-      } else {
-        filterParts.push(`${base}${label}`);
-      }
+      filterParts.push(`[${i}:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps}${label}`);
       scaledLabels.push(label);
     });
 
-    // Build transition chain
     if (n === 1 || transition === 'none') {
-      // No transition needed — just concat
       filterParts.push(`${scaledLabels.join('')}concat=n=${n}:v=1:a=0[outv]`);
     } else {
-      // xfade chain between consecutive clips
       const xfadeMap: Record<SlideshowTransition, string> = {
         fade: 'fade', slide: 'slideleft', zoom: 'zoom', none: 'fade'
       };
       const xfadeType = xfadeMap[transition];
       const fadeDuration = 0.5;
-      const offset = slideDuration - fadeDuration;
 
       let prevLabel = scaledLabels[0];
       for (let i = 1; i < n; i++) {
         const outLabel = i === n - 1 ? '[outv]' : `[xf${i}]`;
-        filterParts.push(
-          `${prevLabel}${scaledLabels[i]}xfade=transition=${xfadeType}:duration=${fadeDuration}:offset=${offset + (i - 1) * (slideDuration - fadeDuration)}${outLabel}`
-        );
+        const offset = (slideDuration - fadeDuration) * i - fadeDuration * (i - 1);
+        filterParts.push(`${prevLabel}${scaledLabels[i]}xfade=transition=${xfadeType}:duration=${fadeDuration}:offset=${offset}${outLabel}`);
         prevLabel = `[xf${i}]`;
       }
     }
 
     cmd
       .complexFilter(filterParts)
-      .outputOptions([
-        '-map [outv]',
-        '-c:v libx264', '-preset ultrafast', '-crf 30',
-        `-threads ${threads}`, '-pix_fmt yuv420p',
-      ])
+      .outputOptions(['-map [outv]', '-c:v libx264', '-preset ultrafast', '-crf 30', `-threads ${threads}`, '-pix_fmt yuv420p'])
       .output(outputPath)
       .on('end', () => { console.log('[slideshow] done'); resolve(); })
       .on('error', (err: Error) => { console.error('[slideshow] error:', err.message); reject(err); })
@@ -198,9 +206,7 @@ export async function createSlideshow(
   });
 
   const fileBuffer = fs.readFileSync(outputPath);
-  const fileName = `slideshow_${tag}.mp4`;
-  const r2Url = await uploadFileToR2(fileBuffer, fileName, 'video/mp4');
-
+  const r2Url = await uploadFileToR2(fileBuffer, `slideshow_${tag}.mp4`, 'video/mp4');
   [...imgPaths, outputPath].forEach(f => { try { fs.unlinkSync(f); } catch {} });
   return r2Url;
 }

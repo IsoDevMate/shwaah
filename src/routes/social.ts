@@ -122,8 +122,10 @@ router.get('/metrics', authenticateUser, asyncHandler('Social', 'GetMetrics')(as
         };
       }
     } catch (err: any) {
-      console.warn(`[Metrics] Failed to fetch ${platform} metrics:`, err.response?.data?.error?.message || err.message);
-      metrics[platform] = { error: 'Could not fetch metrics' };
+      const status = err.response?.status;
+      const detail = err.response?.data?.message || err.response?.data?.error?.message || err.message;
+      console.warn(`[Metrics] Failed to fetch ${platform} metrics (${status ?? 'no status'}):`, detail);
+      metrics[platform] = { error: status === 401 ? 'Token expired or unauthorized — reconnect account' : 'Could not fetch metrics' };
     }
   }));
 
