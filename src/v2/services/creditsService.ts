@@ -1,4 +1,5 @@
 import { UserCreditsModel, PLANS, type PlanId } from '../schemas';
+import { Database } from '../../models';
 
 export const CREDIT_COSTS = {
   publish_post: 1,
@@ -11,6 +12,19 @@ export const CREDIT_COSTS = {
 export async function ensureCredits(userId: string) {
   let credits = await UserCreditsModel.findByUser(userId);
   if (!credits) credits = await UserCreditsModel.initForUser(userId, 'free');
+
+  // Self-heal: if creditsRemaining is absurdly high (e.g. accidentally set to 999999),
+  // cap it to the plan's actual monthly credits
+  const plan = (credits.plan as PlanId) || 'free';
+  const planMax = PLANS[plan].monthlyCredits as number;
+  if (Number(credits.creditsRemaining) > planMax * 10) {
+    await Database.execute(
+      'UPDATE UserCredits SET creditsRemaining = ?, updatedAt = CURRENT_TIMESTAMP WHERE userId = ?',
+      [planMax, userId]
+    );
+    credits = await UserCreditsModel.findByUser(userId);
+  }
+
   return credits;
 }
 
