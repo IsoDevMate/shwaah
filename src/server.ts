@@ -17,6 +17,12 @@ import analyticsRoutes from './routes/analytics';
 import webhookRoutes from './routes/webhooks';
 import notificationsRoutes from './routes/notifications';
 import toolsRoutes from './routes/tools';
+import goalsRoutes from './routes/goals';
+import profileScoutRoutes from './routes/profileScout';
+import bestTimesRoutes from './routes/bestTimes';
+import healthScoreRoutes from './routes/healthScore';
+import inspirationRoutes from './routes/inspiration';
+import milestonesRoutes from './routes/milestones';
 
 // V2 routes
 import subscriptionsRoutes from './v2/routes/subscriptions';
@@ -85,6 +91,14 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/tools', toolsRoutes);
+
+// V4 routes
+app.use('/api/v4/goals', goalsRoutes);
+app.use('/api/v4/scout', profileScoutRoutes);
+app.use('/api/v4/best-times', bestTimesRoutes);
+app.use('/api/v4/health-score', healthScoreRoutes);
+app.use('/api/v4/inspiration', inspirationRoutes);
+app.use('/api/v4/milestones', milestonesRoutes);
 
 // V2 routes
 app.use('/api/v2/subscriptions', subscriptionsRoutes);

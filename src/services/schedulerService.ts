@@ -413,6 +413,79 @@ cron.schedule('0 0 * * *', async () => {
   }
 }, { timezone: 'UTC' });
 
+// Daily follower snapshot + milestone check — runs at 8AM UTC
+cron.schedule('0 8 * * *', async () => {
+  try {
+    const { Database } = await import('../models');
+    const { SocialAccount } = await import('../models/tursoModels');
+    const { decrypt } = await import('../utils/crypto');
+    const { recordFollowerSnapshot } = await import('./milestoneService');
+
+    const accounts = await Database.execute('SELECT * FROM SocialAccounts WHERE isActive = 1');
+
+    for (const account of accounts.rows) {
+      const platform = String(account.platform);
+      const userId = String(account.userId);
+      try {
+        const token = (() => { try { return decrypt(String(account.accessToken)); } catch { return String(account.accessToken); } })();
+        let count = 0;
+
+        if (platform === 'instagram') {
+          const r = await axios.get('https://graph.instagram.com/me', {
+            params: { fields: 'followers_count', access_token: token }
+          });
+          count = r.data.followers_count ?? 0;
+        } else if (platform === 'tiktok') {
+          const r = await axios.get('https://open.tiktokapis.com/v2/user/info/', {
+            params: { fields: 'follower_count' },
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          count = r.data?.data?.user?.follower_count ?? 0;
+        } else if (platform === 'youtube') {
+          const r = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
+            params: { part: 'statistics', mine: true },
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          count = Number(r.data?.items?.[0]?.statistics?.subscriberCount ?? 0);
+        }
+
+        if (count > 0) await recordFollowerSnapshot(userId, platform, count);
+      } catch (err: any) {
+        console.warn(`[Milestones] Failed to fetch ${platform} for user ${userId}:`, err.message);
+      }
+    }
+    console.log(`[Milestones] Snapshot complete for ${accounts.rows.length} accounts`);
+  } catch (err: any) {
+    console.error('[Milestones] Error:', err.message);
+  }
+}, { timezone: 'UTC' });
+
+// Daily goals reminder — runs at 9AM UTC
+cron.schedule('0 9 * * *', async () => {
+  try {
+    const { ContentGoal, Notification } = await import('../models/tursoModels');
+    const { getStreakData } = await import('./goalsService');
+    const goals = await ContentGoal.findAll();
+    for (const goal of goals) {
+      const userId = String(goal.userId);
+      const platform = String(goal.platform);
+      const target = Number(goal.targetPerWeek);
+      const streak = await getStreakData(userId, platform, target);
+      if (!streak.metThisWeek && streak.remaining > 0) {
+        await Notification.create({
+          userId,
+          type: 'goal_reminder',
+          title: `${platform} goal reminder`,
+          message: `You need ${streak.remaining} more post${streak.remaining > 1 ? 's' : ''} on ${platform} this week to hit your goal. Current streak: ${streak.streak} week${streak.streak !== 1 ? 's' : ''}.`,
+        });
+      }
+    }
+    console.log(`[Goals] Sent reminders for ${goals.length} goals`);
+  } catch (err: any) {
+    console.error('[Goals] Reminder error:', err.message);
+  }
+}, { timezone: 'UTC' });
+
 // Also init credits for new users on auth — handled lazily via ensureCredits
 
 export { publishScheduledPost, updateAnalytics, postScheduler, analyticsScheduler };

@@ -8,6 +8,7 @@ export const CREDIT_COSTS = {
   generate_hooks: 1,
   generate_caption: 1,
   generate_slideshow: 2,
+  profile_scout: 3,
 } as const;
 
 export async function ensureCredits(userId: string) {

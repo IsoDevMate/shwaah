@@ -311,6 +311,48 @@ export class Analytics {
   }
 }
 
+export class ContentGoal {
+  static async upsert(data: { userId: string; platform: string; targetPerWeek: number }) {
+    const existing = await Database.execute(
+      'SELECT id FROM ContentGoals WHERE userId = ? AND platform = ?',
+      [data.userId, data.platform]
+    );
+    if (existing.rows.length > 0) {
+      await Database.execute(
+        'UPDATE ContentGoals SET targetPerWeek = ?, updatedAt = CURRENT_TIMESTAMP WHERE userId = ? AND platform = ?',
+        [data.targetPerWeek, data.userId, data.platform]
+      );
+      return { ...data, id: String(existing.rows[0].id) };
+    }
+    const id = generateUUID();
+    await Database.execute(
+      'INSERT INTO ContentGoals (id, userId, platform, targetPerWeek) VALUES (?, ?, ?, ?)',
+      [id, data.userId, data.platform, data.targetPerWeek]
+    );
+    return { id, ...data };
+  }
+
+  static async findByUser(userId: string) {
+    const result = await Database.execute(
+      'SELECT * FROM ContentGoals WHERE userId = ?',
+      [userId]
+    );
+    return result.rows;
+  }
+
+  static async delete(userId: string, platform: string) {
+    await Database.execute(
+      'DELETE FROM ContentGoals WHERE userId = ? AND platform = ?',
+      [userId, platform]
+    );
+  }
+
+  static async findAll() {
+    const result = await Database.execute('SELECT * FROM ContentGoals');
+    return result.rows;
+  }
+}
+
 export class Notification {
   static async create(data: { userId: string; type: string; title: string; message: string; postId?: string }) {
     const id = generateUUID();

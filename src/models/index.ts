@@ -159,6 +159,61 @@ export class Database {
       )
     `);
 
+    await this.execute(`
+      CREATE TABLE IF NOT EXISTS FollowerSnapshots (
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        platform TEXT NOT NULL,
+        count INTEGER NOT NULL,
+        recordedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (userId) REFERENCES Users(id)
+      )
+    `);
+
+    await this.execute(`
+      CREATE TABLE IF NOT EXISTS InspirationBookmarks (
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        url TEXT NOT NULL,
+        title TEXT,
+        notes TEXT,
+        format TEXT,
+        niche TEXT,
+        platform TEXT,
+        thumbnailUrl TEXT,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (userId) REFERENCES Users(id)
+      )
+    `);
+
+    await this.execute(`
+      CREATE TABLE IF NOT EXISTS ProfileScoutReports (
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        platform TEXT NOT NULL,
+        username TEXT NOT NULL,
+        report TEXT NOT NULL,
+        favorite INTEGER DEFAULT 0,
+        notes TEXT,
+        tags TEXT DEFAULT '[]',
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (userId) REFERENCES Users(id)
+      )
+    `);
+
+    await this.execute(`
+      CREATE TABLE IF NOT EXISTS ContentGoals (
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        platform TEXT NOT NULL,
+        targetPerWeek INTEGER NOT NULL,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(userId, platform),
+        FOREIGN KEY (userId) REFERENCES Users(id)
+      )
+    `);
+
     // Run migrations for columns added after initial deploy
     await this.runMigrations();
     
@@ -171,6 +226,9 @@ export class Database {
       { check: "SELECT platformContent FROM Posts LIMIT 1", alter: "ALTER TABLE Posts ADD COLUMN platformContent TEXT" },
       { check: "SELECT balanceAfter FROM CreditTransactions LIMIT 1", alter: "ALTER TABLE CreditTransactions ADD COLUMN balanceAfter INTEGER" },
       { check: "SELECT apiEndpoint FROM CreditTransactions LIMIT 1", alter: "ALTER TABLE CreditTransactions ADD COLUMN apiEndpoint TEXT" },
+      { check: "SELECT favorite FROM ProfileScoutReports LIMIT 1", alter: "ALTER TABLE ProfileScoutReports ADD COLUMN favorite INTEGER DEFAULT 0" },
+      { check: "SELECT notes FROM ProfileScoutReports LIMIT 1", alter: "ALTER TABLE ProfileScoutReports ADD COLUMN notes TEXT" },
+      { check: "SELECT tags FROM ProfileScoutReports LIMIT 1", alter: "ALTER TABLE ProfileScoutReports ADD COLUMN tags TEXT DEFAULT '[]'" },
     ];
 
     for (const { check, alter } of migrations) {
