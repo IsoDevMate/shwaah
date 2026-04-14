@@ -10,11 +10,11 @@ export async function getStreakData(userId: string, platform: string, targetPerW
   const rows = await Database.execute(
     `SELECT strftime('%Y-%W', createdAt) as week, COUNT(*) as count
      FROM Posts
+     JOIN json_each(platforms)
      WHERE userId = ?
        AND status IN ('published','posted')
        AND json_each.value = ?
        AND createdAt >= datetime('now', '-52 weeks')
-     JOIN json_each(platforms)
      GROUP BY week
      ORDER BY week DESC`,
     [userId, platform]

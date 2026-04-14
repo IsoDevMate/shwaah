@@ -296,6 +296,11 @@ async function scoutTikTokViaRapidAPI(handle: string): Promise<ScoutReport> {
 export async function scoutTikTok(username: string): Promise<ScoutReport> {
   const handle = username.startsWith('@') ? username.slice(1) : username;
 
+  // Skip Puppeteer if explicitly disabled or no Chrome available (e.g. Render free tier)
+  if (process.env.PUPPETEER_SKIP === 'true') {
+    return await scoutTikTokViaRapidAPI(handle);
+  }
+
   try {
     return await scoutTikTokViaPuppeteer(handle);
   } catch (puppeteerErr: any) {

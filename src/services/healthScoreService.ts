@@ -2,7 +2,8 @@ import { Database } from '../models';
 
 interface PlatformHealth {
   platform: string;
-  score: number; // 0-100
+  score: number;
+  checks: { label: string; passed: boolean; detail: string }[];
   issues: string[];
   tips: string[];
 }
@@ -156,7 +157,19 @@ export async function buildHealthReport(userId: string, liveMetrics: Record<stri
       tips.push(`Add a bio to your ${platform} profile — it's the first thing new visitors read.`);
     }
 
-    platformReports.push({ platform, score: Math.min(100, score), issues, tips });
+    platformReports.push({
+      platform,
+      score: Math.min(100, score),
+      checks: [
+        { label: 'Posted in last 7 days', passed: (postCount7[platform] || 0) >= 1, detail: (postCount7[platform] || 0) >= 1 ? '' : `Last post was over 7 days ago` },
+        { label: '2+ posts in last 30 days', passed: count30 >= 2, detail: count30 < 2 ? `Only ${count30} post(s) in 30 days` : '' },
+        { label: 'Has engagement data', passed: !!avgEngagement[platform], detail: avgEngagement[platform] ? `${(avgEngagement[platform]*100).toFixed(1)}% avg engagement` : 'No engagement data yet' },
+        { label: 'Uses media (images/video)', passed: !!hasMedia[platform], detail: hasMedia[platform] ? '' : 'No media detected in recent posts' },
+        ...(!m?.bioUnavailable ? [{ label: 'Bio has a call-to-action', passed: !!(m?.bio && /link|bio|shop|dm|comment|follow|subscribe|click|join|sign|get|download|watch|check|visit|book|order|buy/i.test(m.bio)), detail: m?.bio ? '' : 'Bio is empty' }] : []),
+      ],
+      issues,
+      tips,
+    });
   }
 
   const overallScore = Math.round(
