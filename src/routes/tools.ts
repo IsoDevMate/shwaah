@@ -135,15 +135,20 @@ router.post('/carousel/generate-content', creditGuard('generate_carousel'), asyn
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [
-        { role: 'system', content: `You are a social media content strategist. Generate carousel slide content. Style: ${styleGuide[style] || styleGuide['Clean Minimal']}. Return ONLY a valid JSON array, no markdown, no preamble. Shape: [{"slideNumber":1,"title":"string","bullets":["string"]}]` },
+        { role: 'system', content: `You are a social media content strategist. Generate carousel slide content. Style: ${styleGuide[style] || styleGuide['Clean Minimal']}. Return ONLY valid JSON in this exact shape: {"slides":[{"slideNumber":1,"title":"string","bullets":["string"]}]}` },
         { role: 'user', content: `Topic: "${topic}". Generate content for exactly ${imageCount} slides.` }
       ],
       response_format: { type: 'json_object' }
     });
 
     const raw = completion.choices[0].message.content || '{"slides":[]}';
+    console.log('[carousel] raw GPT response:', raw.slice(0, 300));
     const parsed = JSON.parse(raw);
-    const slides = Array.isArray(parsed) ? parsed : (parsed.slides || Object.values(parsed)[0] || []);
+    // GPT always returns an object with json_object mode — find the array value
+    const slides = Array.isArray(parsed.slides) ? parsed.slides
+      : Array.isArray(parsed.data) ? parsed.data
+      : Array.isArray(Object.values(parsed).find(v => Array.isArray(v))) ? Object.values(parsed).find(v => Array.isArray(v)) as any[]
+      : [];
 
     await (req as any).consumeCredits(topic);
     res.json({ success: true, slides });
