@@ -117,7 +117,40 @@ router.post('/upload', (req: AuthRequest, res: Response, next) => {
   }
 });
 
-// POST /api/tools/greenscreen — enqueue job, return jobId immediately
+// POST /api/tools/carousel/generate-content
+router.post('/carousel/generate-content', creditGuard('generate_carousel'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { topic, imageCount, style = 'Clean Minimal' } = req.body;
+    if (!topic || !imageCount) return res.status(400).json({ success: false, message: 'topic and imageCount are required' });
+
+    const OpenAI = (await import('openai')).default;
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+    const styleGuide: Record<string, string> = {
+      'Clean Minimal': 'Clean, minimal copy. Short punchy title (max 6 words). 2-3 short bullet points.',
+      'Bold Typography': 'Bold, impactful statements. Title is a strong claim (max 5 words). 2-3 punchy bullets.',
+      'Educational Infographic': 'Educational tone. Title is a clear lesson heading. 3-4 informative bullet points.',
+    };
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        { role: 'system', content: `You are a social media content strategist. Generate carousel slide content. Style: ${styleGuide[style] || styleGuide['Clean Minimal']}. Return ONLY a valid JSON array, no markdown, no preamble. Shape: [{"slideNumber":1,"title":"string","bullets":["string"]}]` },
+        { role: 'user', content: `Topic: "${topic}". Generate content for exactly ${imageCount} slides.` }
+      ],
+      response_format: { type: 'json_object' }
+    });
+
+    const raw = completion.choices[0].message.content || '{"slides":[]}';
+    const parsed = JSON.parse(raw);
+    const slides = Array.isArray(parsed) ? parsed : (parsed.slides || Object.values(parsed)[0] || []);
+
+    await (req as any).consumeCredits(topic);
+    res.json({ success: true, slides });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 router.post('/greenscreen', async (req: AuthRequest, res: Response) => {
   try {
     const { videoUrl, backgroundUrl, caption = '' } = req.body;
