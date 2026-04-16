@@ -226,7 +226,6 @@ router.get('/outliers', async (req: AuthRequest, res) => {
           for (const v of statsRes.data.items || []) {
             const views = parseInt(v.statistics.viewCount || '0');
             const likes = parseInt(v.statistics.likeCount || '0');
-            const subs = parseInt(v.statistics.commentCount || '0');
             const daysOld = (Date.now() - new Date(v.snippet.publishedAt).getTime()) / 86400000;
             const velocityScore = Math.round(views / Math.max(daysOld, 1) / 1000); // K views/day
             results.push({
@@ -246,32 +245,71 @@ router.get('/outliers', async (req: AuthRequest, res) => {
       }
     }
 
-    // TikTok outliers via RapidAPI
+    // TikTok outliers via Puppeteer (scrape search page)
     if (platform === 'tiktok' || platform === 'both') {
-      const rapidApiKey = process.env.RAPIDAPI_KEY;
-      if (rapidApiKey) {
-        const keyword = niche || 'viral';
-        const tiktokRes = await axios.get('https://tiktok-scraper7.p.rapidapi.com/feed/search', {
-          params: { keywords: keyword, count: 20, sort_type: '1', publish_time: '1' }, // sort by likes, last week
-          headers: { 'x-rapidapi-key': rapidApiKey, 'x-rapidapi-host': 'tiktok-scraper7.p.rapidapi.com' }
+      const puppeteerExtra = (await import('puppeteer-extra')).default;
+      const StealthPlugin = (await import('puppeteer-extra-plugin-stealth')).default;
+      const chromium = (await import('@sparticuz/chromium')).default;
+      puppeteerExtra.use(StealthPlugin());
+
+      let browser: any = null;
+      try {
+        browser = await puppeteerExtra.launch({
+          headless: 'shell' as any,
+          args: chromium.args,
+          executablePath: await chromium.executablePath(),
         });
-        for (const v of tiktokRes.data.data?.videos || []) {
-          const views = v.play_count || 0;
-          const daysOld = (Date.now() - (v.create_time || 0) * 1000) / 86400000;
+        const page = await browser.newPage();
+        await page.setViewport({ width: 1280, height: 800 });
+
+        const keyword = encodeURIComponent(niche || 'viral');
+        let searchItems: any[] = [];
+
+        await page.setRequestInterception(true);
+        page.on('request', (r: any) => r.continue());
+        page.on('response', async (response: any) => {
+          const url: string = response.url();
+          try {
+            if (url.includes('/api/search/general/full') || url.includes('/api/search/item/full') || url.includes('search_item')) {
+              const json = await response.json();
+              const items = json?.data || json?.item_list || [];
+              if (items.length) searchItems = [...searchItems, ...items];
+            }
+          } catch { /* ignore */ }
+        });
+
+        await page.goto(`https://www.tiktok.com/search?q=${keyword}&t=${Date.now()}`, { waitUntil: 'networkidle2', timeout: 30000 });
+        await new Promise(r => setTimeout(r, 4000));
+        await page.evaluate('window.scrollBy(0, 800)');
+        await new Promise(r => setTimeout(r, 2000));
+
+        for (const item of searchItems.slice(0, 30)) {
+          const v = item.item || item;
+          const id = v.id || v.video_id;
+          if (!id) continue;
+          const author = v.author?.uniqueId || v.author?.unique_id || '';
+          const views = v.stats?.playCount || v.play_count || 0;
+          const createTime = v.createTime || v.create_time || 0;
+          const daysOld = (Date.now() - createTime * 1000) / 86400000;
           const velocityScore = Math.round(views / Math.max(daysOld, 1) / 1000);
           results.push({
-            id: v.video_id, platform: 'tiktok',
-            title: v.title || v.desc || '',
-            channelName: v.author?.nickname || v.author?.unique_id || '',
-            thumbnailUrl: v.cover || '',
-            url: `https://www.tiktok.com/@${v.author?.unique_id}/video/${v.video_id}`,
-            viewCount: views, likeCount: v.digg_count || 0,
-            publishedAt: new Date((v.create_time || 0) * 1000).toISOString(),
+            id, platform: 'tiktok',
+            title: v.desc || '',
+            channelName: v.author?.nickname || author,
+            thumbnailUrl: v.video?.cover || v.cover || '',
+            url: `https://www.tiktok.com/@${author}/video/${id}`,
+            viewCount: views,
+            likeCount: v.stats?.diggCount || v.digg_count || 0,
+            publishedAt: new Date(createTime * 1000).toISOString(),
             daysOld: Math.round(daysOld),
             velocityScore,
             type: daysOld <= 3 && velocityScore > 200 ? 'rising_star' : 'outlier',
           });
         }
+      } catch (e: any) {
+        console.warn('[outliers] TikTok puppeteer failed:', e.message);
+      } finally {
+        if (browser) await browser.close();
       }
     }
 
