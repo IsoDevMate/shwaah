@@ -1,6 +1,7 @@
 import express from 'express';
 import axios from 'axios';
 import { SocialAccount } from '../models/tursoModels';
+import { Database } from '../models';
 import { authenticateUser } from '../middleware/auth';
 import { encrypt, decrypt } from '../utils/crypto';
 import { AuthRequest, OAuthTokens, PlatformUserInfo } from '../types';
@@ -249,6 +250,123 @@ router.post('/reconnect/:platform', authenticateUser, asyncHandler('Social', 'Re
   console.log(`[Social] ${platform} marked for reconnection for user ${req.user!.id}`);
   
   return sendSuccess(req, res, { authUrl }, `${platform} disconnected. Use the authUrl to reconnect with proper permissions.`);
+}));
+
+// GET /content-summary/:platform — aggregated content stats for the accounts page
+router.get('/content-summary/:platform', authenticateUser, asyncHandler('Social', 'ContentSummary')(async (req: AuthRequest, res) => {
+  const { platform } = req.params;
+  const userId = req.user!.id;
+
+  // Posts for this platform in last 90 days
+  const since = new Date(Date.now() - 90 * 86400000).toISOString();
+  const postsRes = await Database.execute(
+    `SELECT id, content, createdAt, publishResults FROM Posts
+     WHERE userId = ? AND status = 'published' AND platforms LIKE ? AND createdAt >= ?
+     ORDER BY createdAt DESC LIMIT 100`,
+    [userId, `%${platform}%`, since]
+  );
+  const posts = postsRes.rows;
+
+  // Analytics for those posts
+  const postIds = posts.map((p: any) => p.id);
+  let analytics: any[] = [];
+  if (postIds.length > 0) {
+    const placeholders = postIds.map(() => '?').join(',');
+    const aRes = await Database.execute(
+      `SELECT a.*, p.createdAt as postDate, p.content FROM Analytics a
+       JOIN Posts p ON a.postId = p.id
+       WHERE a.postId IN (${placeholders}) AND a.platform = ?`,
+      [...postIds, platform]
+    );
+    analytics = aRes.rows;
+  }
+
+  // Content performance totals
+  const contentPerformance = {
+    totalVideos: posts.length,
+    totalViews: analytics.reduce((s: number, a: any) => s + (Number(a.views) || 0), 0),
+    totalLikes: analytics.reduce((s: number, a: any) => s + (Number(a.likes) || 0), 0),
+    averageEngagementRate: analytics.length
+      ? analytics.reduce((s: number, a: any) => s + (Number(a.engagementRate) || 0), 0) / analytics.length
+      : 0,
+    postingFrequency: posts.length > 0 ? parseFloat((posts.length / 13).toFixed(1)) : 0, // per week over 90d
+  };
+
+  // Recent activity
+  const now = Date.now();
+  const recentActivity = {
+    lastVideoDate: posts[0]?.createdAt ?? null,
+    videosThisWeek: posts.filter((p: any) => now - new Date(String(p.createdAt)).getTime() < 7 * 86400000).length,
+    videosThisMonth: posts.filter((p: any) => now - new Date(String(p.createdAt)).getTime() < 30 * 86400000).length,
+  };
+
+  // Posting times heatmap — hour + day of week from createdAt
+  const timeBuckets: Record<string, { count: number; totalViews: number }> = {};
+  for (const p of posts) {
+    const d = new Date(String(p.createdAt));
+    const key = `${d.getUTCDay()}-${d.getUTCHours()}`;
+    if (!timeBuckets[key]) timeBuckets[key] = { count: 0, totalViews: 0 };
+    timeBuckets[key].count++;
+    const a = analytics.find((x: any) => x.postId === p.id);
+    timeBuckets[key].totalViews += a ? Number(a.views) || 0 : 0;
+  }
+  const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const postingTimes = Object.entries(timeBuckets)
+    .map(([key, v]) => {
+      const [day, hour] = key.split('-').map(Number);
+      return { day: DAYS[day], hour, timeLabel: `${String(hour).padStart(2,'0')}:00 - ${String(hour+1).padStart(2,'0')}:00`, postCount: v.count, avgViews: v.count ? Math.round(v.totalViews / v.count) : 0 };
+    })
+    .sort((a, b) => b.avgViews - a.avgViews)
+    .slice(0, 5);
+
+  // Hashtag analysis from post content
+  const hashtagMap: Record<string, { count: number; totalViews: number }> = {};
+  for (const p of posts) {
+    const tags = String(p.content || '').match(/#[a-zA-Z0-9_]+/g) ?? [];
+    const a = analytics.find((x: any) => x.postId === p.id);
+    const views = a ? Number(a.views) || 0 : 0;
+    for (const tag of tags) {
+      const t = tag.toLowerCase();
+      if (!hashtagMap[t]) hashtagMap[t] = { count: 0, totalViews: 0 };
+      hashtagMap[t].count++;
+      hashtagMap[t].totalViews += views;
+    }
+  }
+  const topHashtags = Object.entries(hashtagMap)
+    .map(([tag, v]) => ({ tag, count: v.count, totalViews: v.totalViews }))
+    .sort((a, b) => b.totalViews - a.totalViews)
+    .slice(0, 10);
+
+  // Performance timeline (weekly buckets)
+  const weekMap: Record<string, { views: number; likes: number; posts: number }> = {};
+  for (const a of analytics) {
+    const week = new Date(String(a.postDate));
+    week.setUTCDate(week.getUTCDate() - week.getUTCDay());
+    const key = week.toISOString().slice(0, 10);
+    if (!weekMap[key]) weekMap[key] = { views: 0, likes: 0, posts: 0 };
+    weekMap[key].views += Number(a.views) || 0;
+    weekMap[key].likes += Number(a.likes) || 0;
+    weekMap[key].posts++;
+  }
+  const performanceTimeline = Object.entries(weekMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([week, v]) => ({ week, ...v }));
+
+  // Recent videos (last 5)
+  const recentVideos = posts.slice(0, 5).map((p: any) => {
+    const a = analytics.find((x: any) => x.postId === p.id);
+    return { id: p.id, content: String(p.content || '').slice(0, 100), createdAt: p.createdAt, views: a ? Number(a.views) || 0 : 0, likes: a ? Number(a.likes) || 0 : 0 };
+  });
+
+  return sendSuccess(req, res, {
+    recentVideos,
+    topPerformingHashtags: topHashtags,
+    postingTimes,
+    contentPerformance,
+    recentActivity,
+    hashtagAnalysis: { topHashtags, trendingHashtags: topHashtags.slice(0, 3) },
+    performanceTimeline,
+  }, 'Content summary retrieved');
 }));
 
 export default router;
