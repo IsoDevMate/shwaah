@@ -85,6 +85,7 @@ if (!fs.existsSync('uploads')) {
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/social', socialRoutes);
+app.use('/api/v2/social', socialRoutes);
 app.use('/api/posts', postsRoutes);
 app.use('/api/campaigns', campaignsRoutes);
 app.use('/api/analytics', analyticsRoutes);
