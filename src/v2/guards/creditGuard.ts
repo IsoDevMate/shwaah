@@ -11,6 +11,7 @@ const ACTION_LABELS: Record<string, string> = {
   generate_hooks: 'Generated hooks',
   generate_caption: 'Generated captions & hashtags',
   generate_slideshow: 'Generated slideshow',
+  generate_carousel: 'Generated carousel',
 };
 
 // Deducts credits for post creation/publishing
