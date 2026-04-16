@@ -33,9 +33,11 @@ export async function createGreenscreenMeme(
   videoUrl: string,
   backgroundUrl: string,
   caption: string,
-  userId: string
+  userId: string,
+  chromaColor: string = '00b140',
+  tolerance: number = 30
 ): Promise<string> {
-  console.log(`[greenscreen] Starting for user=${userId}`);
+  console.log(`[greenscreen] user=${userId} color=${chromaColor} tolerance=${tolerance}`);
 
   const ffmpeg = (await import('fluent-ffmpeg')).default;
   const ffmpegPath = (await import('ffmpeg-static')).default;
@@ -44,19 +46,33 @@ export async function createGreenscreenMeme(
 
   const tmpDir = os.tmpdir();
   const videoPath = path.join(tmpDir, `gs_video_${Date.now()}.mp4`);
-  const bgPath = path.join(tmpDir, `gs_bg_${Date.now()}.jpg`);
+  const bgPath    = path.join(tmpDir, `gs_bg_${Date.now()}.jpg`);
   const outputPath = path.join(tmpDir, `gs_out_${Date.now()}.mp4`);
 
   await downloadFile(videoUrl, videoPath);
   await downloadFile(backgroundUrl, bgPath);
 
-  await new Promise<void>((resolve, reject) => {
-    const filters = [
-      '[0:v]scale=480:854,setsar=1[bg]',
-      '[1:v]scale=480:854,chromakey=0x00b140:0.3:0.1[fg]',
-      '[bg][fg]overlay=0:0[out]',
-    ];
+  // Normalize: strip # or 0x prefix → bare hex → 0x prefix for ffmpeg
+  const hex = chromaColor.replace(/^#/, '').replace(/^0x/i, '')
+  const ckColor = `0x${hex}`
+  const ckTol   = Math.max(0.01, Math.min(0.99, tolerance / 100))
+  const ckBlend = Math.min(0.15, ckTol * 0.3)
 
+  // Build filter chain — drawtext is appended to the overlay output if caption present
+  const safeCaption = caption.trim().replace(/'/g, "\u2019").replace(/:/g, '\\:')
+  const drawtextSuffix = safeCaption
+    ? `,drawtext=text='${safeCaption}':fontsize=28:fontcolor=white:borderw=2:bordercolor=black@0.8:x=(w-text_w)/2:y=h-80`
+    : ''
+
+  const filters = [
+    `[0:v]scale=480:854,setsar=1[bg]`,
+    `[1:v]scale=480:854,chromakey=${ckColor}:${ckTol.toFixed(3)}:${ckBlend.toFixed(3)}[fg]`,
+    `[bg][fg]overlay=0:0${drawtextSuffix}[out]`,
+  ]
+
+  const stderrLines: string[] = []
+
+  await new Promise<void>((resolve, reject) => {
     ffmpeg()
       .input(bgPath)
       .input(videoPath)
@@ -68,19 +84,19 @@ export async function createGreenscreenMeme(
         `-threads ${Math.max(2, os.cpus().length - 1)}`,
       ])
       .output(outputPath)
-      .on('end', () => { console.log('[greenscreen] ffmpeg done'); resolve(); })
-      .on('error', (err: Error) => { console.error('[greenscreen] ffmpeg error:', err.message); reject(err); })
-      .run();
-  });
+      .on('stderr', (line: string) => stderrLines.push(line))
+      .on('end', () => resolve())
+      .on('error', (err: Error) => {
+        const detail = stderrLines.filter(l => l.includes('Error') || l.includes('Invalid') || l.includes('No such')).slice(-3).join(' | ')
+        reject(new Error(detail ? `${err.message} — ${detail}` : err.message))
+      })
+      .run()
+  })
 
-  const fileBuffer = fs.readFileSync(outputPath);
-  const fileName = `greenscreen_${userId}_${Date.now()}.mp4`;
-  const r2Url = await uploadFileToR2(fileBuffer, fileName, 'video/mp4');
-  console.log(`[greenscreen] Done, url=${r2Url}`);
-
-  [videoPath, bgPath, outputPath].forEach(f => { try { fs.unlinkSync(f); } catch {} });
-
-  return r2Url;
+  const fileBuffer = fs.readFileSync(outputPath)
+  const r2Url = await uploadFileToR2(fileBuffer, `greenscreen_${userId}_${Date.now()}.mp4`, 'video/mp4')
+  ;[videoPath, bgPath, outputPath].forEach(f => { try { fs.unlinkSync(f) } catch {} })
+  return r2Url
 }
 
 export async function generateCaptions(topic: string, platforms: string[]): Promise<{ captions: Record<string, string>; hashtags: string[] }> {

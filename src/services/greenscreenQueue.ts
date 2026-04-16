@@ -15,10 +15,10 @@ export const greenscreenQueue = new Queue('greenscreen', { connection });
 const jobResults = new Map<string, { status: 'processing' | 'done' | 'failed'; url?: string; error?: string }>();
 
 new Worker('greenscreen', async (job: Job) => {
-  const { videoUrl, backgroundUrl, caption, userId } = job.data;
+  const { videoUrl, backgroundUrl, caption, chromaColor, tolerance, userId } = job.data;
   jobResults.set(job.id!, { status: 'processing' });
   try {
-    const url = await createGreenscreenMeme(videoUrl, backgroundUrl, caption, userId);
+    const url = await createGreenscreenMeme(videoUrl, backgroundUrl, caption, userId, chromaColor, tolerance);
     jobResults.set(job.id!, { status: 'done', url });
   } catch (err: any) {
     jobResults.set(job.id!, { status: 'failed', error: err.message });

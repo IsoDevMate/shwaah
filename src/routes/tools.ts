@@ -153,11 +153,16 @@ router.post('/carousel/generate-content', creditGuard('generate_carousel'), asyn
 });
 router.post('/greenscreen', async (req: AuthRequest, res: Response) => {
   try {
-    const { videoUrl, backgroundUrl, caption = '' } = req.body;
+    const { videoUrl, backgroundUrl, caption = '', chromaColor = '00b140', tolerance = 30 } = req.body;
     if (!videoUrl || !backgroundUrl) {
       return res.status(400).json({ success: false, message: 'videoUrl and backgroundUrl are required' });
     }
-    const job = await greenscreenQueue.add('process', { videoUrl, backgroundUrl, caption, userId: req.user!.id });
+    const job = await greenscreenQueue.add('process', {
+      videoUrl, backgroundUrl, caption,
+      chromaColor: String(chromaColor).replace(/^#/, '').replace(/^0x/i, ''),
+      tolerance: Number(tolerance),
+      userId: req.user!.id
+    });
     res.json({ success: true, jobId: job.id });
   } catch (err: any) {
     console.error('[POST /api/tools/greenscreen] Error:', err.message);
