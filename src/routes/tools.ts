@@ -117,6 +117,29 @@ router.post('/upload', (req: AuthRequest, res: Response, next) => {
   }
 });
 
+// POST /api/tools/carousel/rewrite-slide
+router.post('/carousel/rewrite-slide', creditGuard('generate_carousel'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { title, bullets, tone = 'punchy' } = req.body
+    if (!title) return res.status(400).json({ success: false, message: 'title is required' })
+    const OpenAI = (await import('openai')).default
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You are a social media copywriter. Rewrite the given slide content. Return ONLY valid JSON: {"title":"string","bullets":["string"]}' },
+        { role: 'user', content: `Rewrite this slide in a ${tone} tone.\nTitle: ${title}\nBullets: ${bullets.join(' | ')}` }
+      ],
+      response_format: { type: 'json_object' }
+    })
+    const result = JSON.parse(completion.choices[0].message.content || '{}')
+    await (req as any).consumeCredits('rewrite slide')
+    res.json({ success: true, title: result.title, bullets: result.bullets })
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message })
+  }
+})
+
 // POST /api/tools/carousel/generate-content
 router.post('/carousel/generate-content', creditGuard('generate_carousel'), async (req: AuthRequest, res: Response) => {
   try {
