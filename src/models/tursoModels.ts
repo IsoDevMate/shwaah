@@ -312,22 +312,22 @@ export class Analytics {
 }
 
 export class ContentGoal {
-  static async upsert(data: { userId: string; platform: string; targetPerWeek: number }) {
+  static async upsert(data: { userId: string; platform: string; targetPerWeek: number; name?: string; targetFollowers?: number; deadline?: string }) {
     const existing = await Database.execute(
       'SELECT id FROM ContentGoals WHERE userId = ? AND platform = ?',
       [data.userId, data.platform]
     );
     if (existing.rows.length > 0) {
       await Database.execute(
-        'UPDATE ContentGoals SET targetPerWeek = ?, updatedAt = CURRENT_TIMESTAMP WHERE userId = ? AND platform = ?',
-        [data.targetPerWeek, data.userId, data.platform]
+        'UPDATE ContentGoals SET targetPerWeek = ?, name = ?, targetFollowers = ?, deadline = ?, updatedAt = CURRENT_TIMESTAMP WHERE userId = ? AND platform = ?',
+        [data.targetPerWeek, data.name ?? null, data.targetFollowers ?? null, data.deadline ?? null, data.userId, data.platform]
       );
       return { ...data, id: String(existing.rows[0].id) };
     }
     const id = generateUUID();
     await Database.execute(
-      'INSERT INTO ContentGoals (id, userId, platform, targetPerWeek) VALUES (?, ?, ?, ?)',
-      [id, data.userId, data.platform, data.targetPerWeek]
+      'INSERT INTO ContentGoals (id, userId, platform, targetPerWeek, name, targetFollowers, deadline) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [id, data.userId, data.platform, data.targetPerWeek, data.name ?? null, data.targetFollowers ?? null, data.deadline ?? null]
     );
     return { id, ...data };
   }

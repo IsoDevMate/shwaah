@@ -5,6 +5,7 @@ import { ResponseUtil } from '../utils/ResponseUtil';
 import { creditGuard } from '../v2/guards/creditGuard';
 import { scoutYouTube, scoutTikTok } from '../services/profileScoutService';
 import { Database, generateUUID } from '../models';
+import axios from 'axios';
 
 const router = Router();
 router.use(authenticateUser);
@@ -198,6 +199,84 @@ router.get('/stats', async (req: AuthRequest, res) => {
       byPlatform: byPlatform.rows,
       recentAnalyses: recent.rows,
     }, 'Stats retrieved');
+  } catch (e: any) {
+    return ResponseUtil.error(res, 500, e.message);
+  }
+});
+
+// GET /outliers — fetch viral outlier & rising trend videos from YouTube Shorts + TikTok
+router.get('/outliers', async (req: AuthRequest, res) => {
+  try {
+    const { platform = 'both', niche = '' } = req.query as { platform?: string; niche?: string };
+    const results: any[] = [];
+
+    // YouTube Shorts outliers
+    if (platform === 'youtube' || platform === 'both') {
+      const apiKey = process.env.YOUTUBE_API_KEY;
+      if (apiKey) {
+        const q = niche ? `${niche} shorts` : '#shorts';
+        const searchRes = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+          params: { part: 'id', q, type: 'video', videoDuration: 'short', order: 'viewCount', maxResults: 20, publishedAfter: new Date(Date.now() - 14 * 86400000).toISOString(), key: apiKey }
+        });
+        const ids = searchRes.data.items?.map((i: any) => i.id.videoId).join(',');
+        if (ids) {
+          const statsRes = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
+            params: { part: 'snippet,statistics,contentDetails', id: ids, key: apiKey }
+          });
+          for (const v of statsRes.data.items || []) {
+            const views = parseInt(v.statistics.viewCount || '0');
+            const likes = parseInt(v.statistics.likeCount || '0');
+            const subs = parseInt(v.statistics.commentCount || '0');
+            const daysOld = (Date.now() - new Date(v.snippet.publishedAt).getTime()) / 86400000;
+            const velocityScore = Math.round(views / Math.max(daysOld, 1) / 1000); // K views/day
+            results.push({
+              id: v.id, platform: 'youtube',
+              title: v.snippet.title,
+              channelName: v.snippet.channelTitle,
+              thumbnailUrl: v.snippet.thumbnails?.medium?.url || '',
+              url: `https://www.youtube.com/shorts/${v.id}`,
+              viewCount: views, likeCount: likes,
+              publishedAt: v.snippet.publishedAt,
+              daysOld: Math.round(daysOld),
+              velocityScore,
+              type: daysOld <= 3 && velocityScore > 500 ? 'rising_star' : 'outlier',
+            });
+          }
+        }
+      }
+    }
+
+    // TikTok outliers via RapidAPI
+    if (platform === 'tiktok' || platform === 'both') {
+      const rapidApiKey = process.env.RAPIDAPI_KEY;
+      if (rapidApiKey) {
+        const keyword = niche || 'viral';
+        const tiktokRes = await axios.get('https://tiktok-scraper7.p.rapidapi.com/feed/search', {
+          params: { keywords: keyword, count: 20, sort_type: '1', publish_time: '1' }, // sort by likes, last week
+          headers: { 'x-rapidapi-key': rapidApiKey, 'x-rapidapi-host': 'tiktok-scraper7.p.rapidapi.com' }
+        });
+        for (const v of tiktokRes.data.data?.videos || []) {
+          const views = v.play_count || 0;
+          const daysOld = (Date.now() - (v.create_time || 0) * 1000) / 86400000;
+          const velocityScore = Math.round(views / Math.max(daysOld, 1) / 1000);
+          results.push({
+            id: v.video_id, platform: 'tiktok',
+            title: v.title || v.desc || '',
+            channelName: v.author?.nickname || v.author?.unique_id || '',
+            thumbnailUrl: v.cover || '',
+            url: `https://www.tiktok.com/@${v.author?.unique_id}/video/${v.video_id}`,
+            viewCount: views, likeCount: v.digg_count || 0,
+            publishedAt: new Date((v.create_time || 0) * 1000).toISOString(),
+            daysOld: Math.round(daysOld),
+            velocityScore,
+            type: daysOld <= 3 && velocityScore > 200 ? 'rising_star' : 'outlier',
+          });
+        }
+      }
+    }
+
+    results.sort((a, b) => b.velocityScore - a.velocityScore);
+    return ResponseUtil.success(res, 200, results, 'Outliers retrieved');
   } catch (e: any) {
     return ResponseUtil.error(res, 500, e.message);
   }

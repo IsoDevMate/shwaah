@@ -25,9 +25,23 @@ export interface ScoutReport {
     avgEngagementRate: number;
     avgViralityScore: number;
     totalViewsAnalyzed: number;
+    avgViewsPerVideo: number;
   };
+  postingFrequency: {
+    postsPerWeek: number;
+    totalDays: number;
+    pattern: 'Very Low' | 'Low' | 'Moderate' | 'High' | 'Very High';
+  };
+  postingTimes: {
+    day: string;
+    hour: number;
+    timeLabel: string;
+    avgViews: number;
+    postCount: number;
+  }[];
   keywords: {
     topPerforming: { keyword: string; associatedViews: number; engagementRate: number }[];
+    mostViewed: { keyword: string; totalViews: number; videoCount: number }[];
     recommended: string[];
     toReconsider: string[];
   };
@@ -36,6 +50,11 @@ export interface ScoutReport {
     totalViews: number;
     avgEngagementRate: number;
     occurrences: number;
+  }[];
+  audienceCountries: {
+    country: string;
+    percentage: number;
+    count: number;
   }[];
   videos: {
     id: string;
@@ -47,6 +66,7 @@ export interface ScoutReport {
     viralityScore: number;
     duration: number;
     url: string;
+    publishedAt: string;
   }[];
 }
 
@@ -290,7 +310,24 @@ async function scoutTikTokViaRapidAPI(handle: string): Promise<ScoutReport> {
     description: v.desc || '',
   }));
 
-  return buildReport('tiktok', `@${handle}`, handle, stats?.followerCount || 0, user.avatarMedium || '', rawVideos);
+  // Fetch audience country distribution
+  let audienceCountries: ScoutReport['audienceCountries'] = [];
+  try {
+    const audienceRes = await axios.get('https://tiktok-scraper7.p.rapidapi.com/user/audience', {
+      params: { user_id: user.uid },
+      headers: { 'x-rapidapi-key': rapidApiKey, 'x-rapidapi-host': 'tiktok-scraper7.p.rapidapi.com' }
+    });
+    const countries = audienceRes.data.data?.countries || audienceRes.data.data?.audience_countries || [];
+    audienceCountries = countries.slice(0, 12).map((c: any) => ({
+      country: c.country_name || c.name || c.country || 'Unknown',
+      percentage: parseFloat((c.percentage || c.percent || 0).toFixed(2)),
+      count: c.count || Math.round((c.percentage || 0) / 100 * (stats?.followerCount || 0)),
+    }));
+  } catch { /* audience data optional — don't fail the whole scout */ }
+
+  const report = buildReport('tiktok', `@${handle}`, handle, stats?.followerCount || 0, user.avatarMedium || '', rawVideos);
+  report.audienceCountries = audienceCountries;
+  return report;
 }
 
 export async function scoutTikTok(username: string): Promise<ScoutReport> {
@@ -323,59 +360,91 @@ function buildReport(
   const videos = rawVideos.map(v => {
     const er = engagementRate(v.likeCount, v.commentCount, v.viewCount);
     return {
-      id: v.id,
-      title: v.title,
-      thumbnailUrl: v.thumbnailUrl,
-      viewCount: v.viewCount,
-      likeCount: v.likeCount,
-      engagementRate: er,
-      viralityScore: viralityScore(v.viewCount, avgViews),
-      duration: v.duration,
-      url: v.url,
+      id: v.id, title: v.title, thumbnailUrl: v.thumbnailUrl,
+      viewCount: v.viewCount, likeCount: v.likeCount,
+      engagementRate: er, viralityScore: viralityScore(v.viewCount, avgViews),
+      duration: v.duration, url: v.url, publishedAt: v.publishedAt,
     };
   });
 
   const avgEngagementRate = videos.length
-    ? parseFloat((videos.reduce((s, v) => s + v.engagementRate, 0) / videos.length).toFixed(4))
-    : 0;
+    ? parseFloat((videos.reduce((s, v) => s + v.engagementRate, 0) / videos.length).toFixed(4)) : 0;
   const avgViralityScore = videos.length
-    ? Math.round(videos.reduce((s, v) => s + v.viralityScore, 0) / videos.length)
-    : 0;
+    ? Math.round(videos.reduce((s, v) => s + v.viralityScore, 0) / videos.length) : 0;
+
+  // Posting frequency
+  const postingFrequency = computePostingFrequency(rawVideos);
+
+  // Posting times heatmap (day x hour by avg views)
+  const postingTimes = computePostingTimes(rawVideos);
 
   // Keyword analysis
   const allKeywords = extractKeywords(rawVideos.map(v => `${v.title} ${v.description}`));
-
-  // Top performing: keywords from top 25% videos by views
   const topVideos = [...rawVideos].sort((a, b) => b.viewCount - a.viewCount).slice(0, Math.ceil(rawVideos.length * 0.25));
   const topKeywordSet = new Set(extractKeywords(topVideos.map(v => `${v.title} ${v.description}`)).slice(0, 20));
-
-  // Bottom 25% videos
   const bottomVideos = [...rawVideos].sort((a, b) => a.viewCount - b.viewCount).slice(0, Math.ceil(rawVideos.length * 0.25));
   const bottomKeywordSet = new Set(extractKeywords(bottomVideos.map(v => `${v.title} ${v.description}`)).slice(0, 20));
 
-  const topPerforming = allKeywords
-    .filter(k => topKeywordSet.has(k))
-    .slice(0, 10)
-    .map(keyword => {
-      const associated = rawVideos.filter(v => `${v.title} ${v.description}`.toLowerCase().includes(keyword));
-      const assocViews = associated.reduce((s, v) => s + v.viewCount, 0);
-      const assocER = associated.length
-        ? parseFloat((associated.reduce((s, v) => s + engagementRate(v.likeCount, v.commentCount, v.viewCount), 0) / associated.length).toFixed(4))
-        : 0;
-      return { keyword, associatedViews: assocViews, engagementRate: assocER };
-    });
+  const topPerforming = allKeywords.filter(k => topKeywordSet.has(k)).slice(0, 10).map(keyword => {
+    const associated = rawVideos.filter(v => `${v.title} ${v.description}`.toLowerCase().includes(keyword));
+    return {
+      keyword,
+      associatedViews: associated.reduce((s, v) => s + v.viewCount, 0),
+      engagementRate: associated.length
+        ? parseFloat((associated.reduce((s, v) => s + engagementRate(v.likeCount, v.commentCount, v.viewCount), 0) / associated.length).toFixed(4)) : 0,
+    };
+  });
+
+  // Most viewed keywords: ranked by total views of videos containing them
+  const mostViewed = allKeywords.slice(0, 30).map(keyword => {
+    const associated = rawVideos.filter(v => `${v.title} ${v.description}`.toLowerCase().includes(keyword));
+    return { keyword, totalViews: associated.reduce((s, v) => s + v.viewCount, 0), videoCount: associated.length };
+  }).sort((a, b) => b.totalViews - a.totalViews).slice(0, 10);
 
   const recommended = allKeywords.filter(k => topKeywordSet.has(k) && !bottomKeywordSet.has(k)).slice(0, 10);
   const toReconsider = allKeywords.filter(k => bottomKeywordSet.has(k) && !topKeywordSet.has(k)).slice(0, 10);
 
   return {
-    platform,
-    username: displayName,
-    followerCount,
-    profilePictureUrl,
-    summary: { avgEngagementRate, avgViralityScore, totalViewsAnalyzed: totalViews },
-    keywords: { topPerforming, recommended, toReconsider },
+    platform, username: displayName, followerCount, profilePictureUrl,
+    summary: { avgEngagementRate, avgViralityScore, totalViewsAnalyzed: totalViews, avgViewsPerVideo: Math.round(avgViews) },
+    postingFrequency,
+    postingTimes,
+    keywords: { topPerforming, mostViewed, recommended, toReconsider },
     hashtags: extractHashtags(rawVideos),
+    audienceCountries: [],  // populated separately for TikTok via RapidAPI
     videos,
   };
+}
+
+const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+function computePostingFrequency(videos: VideoData[]): ScoutReport['postingFrequency'] {
+  if (!videos.length) return { postsPerWeek: 0, totalDays: 0, pattern: 'Very Low' };
+  const dates = videos.map(v => new Date(v.publishedAt).getTime()).sort((a, b) => a - b);
+  const totalDays = Math.max(1, Math.round((dates[dates.length-1] - dates[0]) / 86400000));
+  const postsPerWeek = parseFloat(((videos.length / totalDays) * 7).toFixed(1));
+  const pattern: ScoutReport['postingFrequency']['pattern'] =
+    postsPerWeek >= 7 ? 'Very High' : postsPerWeek >= 4 ? 'High' : postsPerWeek >= 2 ? 'Moderate' : postsPerWeek >= 1 ? 'Low' : 'Very Low';
+  return { postsPerWeek, totalDays, pattern };
+}
+
+function computePostingTimes(videos: VideoData[]): ScoutReport['postingTimes'] {
+  if (!videos.length) return [];
+  const slotMap: Record<string, { views: number; count: number }> = {};
+  for (const v of videos) {
+    const d = new Date(v.publishedAt);
+    const key = `${d.getUTCDay()}-${d.getUTCHours()}`;
+    if (!slotMap[key]) slotMap[key] = { views: 0, count: 0 };
+    slotMap[key].views += v.viewCount;
+    slotMap[key].count += 1;
+  }
+  return Object.entries(slotMap)
+    .map(([key, val]) => {
+      const [dow, hour] = key.split('-').map(Number);
+      const h = hour % 12 === 0 ? 12 : hour % 12;
+      const period = hour < 12 ? 'AM' : 'PM';
+      return { day: DAYS[dow], hour, timeLabel: `${h}:00 ${period}`, avgViews: Math.round(val.views / val.count), postCount: val.count };
+    })
+    .sort((a, b) => b.avgViews - a.avgViews)
+    .slice(0, 10);
 }

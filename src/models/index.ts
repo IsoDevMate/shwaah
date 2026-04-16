@@ -229,6 +229,9 @@ export class Database {
       { check: "SELECT favorite FROM ProfileScoutReports LIMIT 1", alter: "ALTER TABLE ProfileScoutReports ADD COLUMN favorite INTEGER DEFAULT 0" },
       { check: "SELECT notes FROM ProfileScoutReports LIMIT 1", alter: "ALTER TABLE ProfileScoutReports ADD COLUMN notes TEXT" },
       { check: "SELECT tags FROM ProfileScoutReports LIMIT 1", alter: "ALTER TABLE ProfileScoutReports ADD COLUMN tags TEXT DEFAULT '[]'" },
+      { check: "SELECT name FROM ContentGoals LIMIT 1", alter: "ALTER TABLE ContentGoals ADD COLUMN name TEXT" },
+      { check: "SELECT targetFollowers FROM ContentGoals LIMIT 1", alter: "ALTER TABLE ContentGoals ADD COLUMN targetFollowers INTEGER" },
+      { check: "SELECT deadline FROM ContentGoals LIMIT 1", alter: "ALTER TABLE ContentGoals ADD COLUMN deadline TEXT" },
     ];
 
     for (const { check, alter } of migrations) {
