@@ -12,6 +12,7 @@ const ACTION_LABELS: Record<string, string> = {
   generate_caption: 'Generated captions & hashtags',
   generate_slideshow: 'Generated slideshow',
   generate_carousel: 'Generated carousel',
+  presence_audit_fix: 'Unlocked presence audit fix',
 };
 
 // Deducts credits for post creation/publishing

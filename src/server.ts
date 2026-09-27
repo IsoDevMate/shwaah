@@ -23,12 +23,18 @@ import bestTimesRoutes from './routes/bestTimes';
 import healthScoreRoutes from './routes/healthScore';
 import inspirationRoutes from './routes/inspiration';
 import milestonesRoutes from './routes/milestones';
+import presenceAuditRoutes from './routes/presenceAudit';
+import voiceNotesRoutes from './routes/voiceNotes';
+import directionEngineRoutes from './routes/directionEngine';
 
 // V2 routes
 import subscriptionsRoutes from './v2/routes/subscriptions';
 import creditsRoutes from './v2/routes/credits';
 import affiliatesRoutes from './v2/routes/affiliates';
 import { runV2Migrations } from './v2/schemas';
+import { runPresenceAuditMigrations } from './migrations/presenceAudit';
+import { runVoiceNotesMigrations } from './migrations/voiceNotes';
+import { runDirectionEngineMigrations } from './migrations/directionEngine';
 
 // V3 routes
 import socialV3Routes from './v3/routes/social';
@@ -100,6 +106,9 @@ app.use('/api/v4/best-times', bestTimesRoutes);
 app.use('/api/v4/health-score', healthScoreRoutes);
 app.use('/api/v4/inspiration', inspirationRoutes);
 app.use('/api/v4/milestones', milestonesRoutes);
+app.use('/api/v4/presence-audit', presenceAuditRoutes);
+app.use('/api/v4/voice-notes', voiceNotesRoutes);
+app.use('/api/v4/direction-engine', directionEngineRoutes);
 
 // V2 routes
 app.use('/api/v2/subscriptions', subscriptionsRoutes);
@@ -163,6 +172,9 @@ async function startServer() {
     console.log('🔗 Connecting to Turso database...');
     await Database.init();
     await runV2Migrations();
+    await runPresenceAuditMigrations();
+    await runVoiceNotesMigrations();
+    await runDirectionEngineMigrations();
     console.log('✅ Database connection established successfully.');
     
     app.listen(PORT, () => {
