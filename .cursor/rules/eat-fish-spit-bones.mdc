@@ -1,0 +1,15 @@
+---
+description: Verify AI claims with independent runtime evidence
+alwaysApply: true
+---
+
+# Eat the fish, spit the bones
+
+Models produce drafts, not proof.
+
+- Keep a claim only when it matches an HTTP response, DB before/after, R2 object, log trace, test exit code, or file opened this turn.
+- For verification work, separate findings into **Fish**, **Bones**, and **Unknown**.
+- Plans, generated reports, and confident explanations are not runtime evidence.
+- Never invent results or describe unrun checks as complete.
+- If a check cannot be exercised, label it code-only or unknown.
+- For Shwaah writes, verify the API response and the persisted Turso/R2 state.

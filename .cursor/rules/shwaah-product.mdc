@@ -1,0 +1,14 @@
+---
+description: Preserve Shwaah product boundaries and trusted working paths
+alwaysApply: true
+---
+
+# Shwaah product law
+
+- Do not refactor confirmed working upload, OAuth, TikTok publish, Instagram publish, or token encryption paths without a reproduced bug.
+- Build new product surfaces additively.
+- Presence Audit starts from a connected Instagram post, gives specific free diagnosis, and gates the fix. Never invent uplift percentages.
+- Voice Notes captures raw ideas through recording or import; it does not generate the creator's soul.
+- Keep raw creator input intact. Automation handles organization, analysis, and shipping.
+- Prefer explicit schemas, typed validation, idempotent writes, and persisted audit history.
+- Never commit `.env`, credentials, access tokens, or downloaded client secrets.

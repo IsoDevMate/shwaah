@@ -1,0 +1,16 @@
+---
+description: Run multi-session AI work with durable checklists and evidence
+alwaysApply: true
+---
+
+# AI session system
+
+Use the Multigres triangle: system, expertise, discipline.
+
+- Durable truth lives in repository docs and tests, not chat history.
+- Read `AGENTS.md`, `docs/ENGINEERING.md`, and `docs/STAGES.md` before broad work.
+- Define the expected correct output before interpreting a result.
+- Split large work into independently verifiable stages.
+- End each stage with build/lint evidence and a handoff in `docs/STAGES.md`.
+- If an agent says “done,” require the command, exit status, and affected API/DB field.
+- Fix root causes; do not hide design errors behind local patches.
