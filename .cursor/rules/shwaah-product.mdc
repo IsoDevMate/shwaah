@@ -1,14 +1,28 @@
 ---
-description: Preserve Shwaah product boundaries and trusted working paths
+description: Shwaah product boundaries + failure modes we refuse to repeat
 alwaysApply: true
 ---
 
 # Shwaah product law
 
-- Do not refactor confirmed working upload, OAuth, TikTok publish, Instagram publish, or token encryption paths without a reproduced bug.
-- Build new product surfaces additively.
-- Presence Audit starts from a connected Instagram post, gives specific free diagnosis, and gates the fix. Never invent uplift percentages.
-- Voice Notes captures raw ideas through recording or import; it does not generate the creator's soul.
-- Keep raw creator input intact. Automation handles organization, analysis, and shipping.
-- Prefer explicit schemas, typed validation, idempotent writes, and persisted audit history.
-- Never commit `.env`, credentials, access tokens, or downloaded client secrets.
+Evidence doctrine: `docs/EAT-FISH-SPIT-BONES.md`. Working paths: `.kiro/context.md`.
+
+## Do not break
+
+- Confirmed working media upload (R2), TikTok publish, Instagram publish, OAuth, token encryption — no drive-by refactors without a reproduced bug.
+
+## Build additively
+
+- **Presence Audit:** connected Instagram → select owned post → Hook/Relatability/Retention free → fix gated. Never fake uplift %. Never accept foreign media IDs.
+- **Voice Notes:** record + import → R2 + Turso. Capture raw ideas; do not generate the creator’s soul.
+- **Direction Engine:** weekly questions → five concrete hooks persisted. No virality theater.
+- Automate shipping/logistics; keep raw creator input intact.
+
+## Engineering bar
+
+- Explicit migrations, Zod validation, user-scoped queries, credit costs named (`presence_audit_fix`, etc.)
+- Never commit `.env`, tokens, or client secrets
+
+## If tempted to “just ship the UI”
+
+Stop. Require Fish for the API write path first (Claudegres lesson: artifact of planning ≠ planning).

@@ -12,6 +12,10 @@ Evidence:
   TypeScript/Vite production build until that baseline is repaired separately.
 - Global Cursor rules appended under `~/.cursor/rules/`
   (`eat-fish-spit-bones.mdc`, `ai-session-system.mdc`).
+- **Doctrine expansion (2026-09-27):** `docs/EAT-FISH-SPIT-BONES.md` rewritten
+  with full Claudegres/Multigres/Shamiri failure catalogue mapped to Presence
+  Audit, Voice Notes, and Direction Engine. Always-on rules + `AGENTS.md`
+  tightened to force Fish before “done.”
 
 ## Stage 1 — Instagram Presence Audit API
 

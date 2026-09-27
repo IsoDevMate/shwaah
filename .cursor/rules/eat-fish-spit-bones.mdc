@@ -1,15 +1,34 @@
 ---
-description: Verify AI claims with independent runtime evidence
+description: Claudegres/Multigres evidence law for Shwaah — no narrative-only PASS
 alwaysApply: true
 ---
 
 # Eat the fish, spit the bones
 
-Models produce drafts, not proof.
+Full catalogue: `docs/EAT-FISH-SPIT-BONES.md` (Claudegres Index Scan lie, Multigres checklists, Shamiri C11/B-05 scars).
 
-- Keep a claim only when it matches an HTTP response, DB before/after, R2 object, log trace, test exit code, or file opened this turn.
-- For verification work, separate findings into **Fish**, **Bones**, and **Unknown**.
-- Plans, generated reports, and confident explanations are not runtime evidence.
-- Never invent results or describe unrun checks as complete.
-- If a check cannot be exercised, label it code-only or unknown.
-- For Shwaah writes, verify the API response and the persisted Turso/R2 state.
+Models/agents are **drafts**, not oracles. Keep only what matches independent observation.
+
+## Non-negotiable
+
+1. Never grade a claim by narrative alone. Require HTTP status/body, Turso before→after, R2 object, log/trace, test exit, or a file opened this turn.
+2. Every verify reply uses **Fish / Bones / Unknown**.
+3. Plans are not proof. Claudegres: `EXPLAIN Index Scan` while FileRead was sequential. Same class: UI “saved” with no `PresenceAudits`/`VoiceNotes` row.
+4. Wrong harness ≠ working feature. Client-supplied IG URL ≠ owned media. Hardcoded PASS/FAIL ≠ probe.
+5. Do not invent evidence. Unrun checks = Unknown or code-only.
+6. Never invent Gabber-style uplift percentages (“69% chance of 4x”).
+7. Do not promote Bones into `docs/STAGES.md`.
+
+## Shwaah Fish vs Bones (feature-specific)
+
+| Fish | Bones |
+|------|--------|
+| Audit 201 + `PresenceAudits` row + grades in body | Mock grades / empty table / foreign media accepted |
+| Unlock 402 without credits; 200 + persisted `fix` with credits | “Fix unlocked” toast with null `fix` |
+| Voice note 201 + Turso row + playable `audioUrl` | Recorder UI only; no R2 object |
+| Direction 201 + five ideas + history GET | Pretty prose, no `DirectionSessions` row |
+| Build/lint for **touched** paths | “Build passed” as proof the endpoint works |
+
+## When stuck
+
+Re-run the real route. Log path (endpoint, status, SQL/R2). Fix the probe before trusting the score. Read `docs/EAT-FISH-SPIT-BONES.md`.

@@ -1,5 +1,14 @@
 # Shwaah engineering guide
 
+## Evidence first
+
+Before claiming anything works, read `docs/EAT-FISH-SPIT-BONES.md`. That file
+carries the Claudegres Index Scan lie, Multigres checklist discipline, and
+Shamiri C11/B-05 scars — mapped onto Presence Audit, Voice Notes, and Direction
+Engine so we do not repeat them.
+
+Fish / Bones / Unknown. Plans are not proof. Build pass ≠ behaviour.
+
 ## Product boundaries
 
 Shwaah's backend already has working media upload, Instagram/TikTok publishing,

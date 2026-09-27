@@ -1,16 +1,38 @@
 ---
-description: Run multi-session AI work with durable checklists and evidence
+description: Multigres triangle — system, expertise, discipline for Shwaah agents
 alwaysApply: true
 ---
 
-# AI session system
+# AI session system (Multigres)
 
-Use the Multigres triangle: system, expertise, discipline.
+Borrowed from Multigres + Shamiri lab practice: **system + expertise + discipline**. The model types; we engineer. Full map: `docs/EAT-FISH-SPIT-BONES.md`.
 
-- Durable truth lives in repository docs and tests, not chat history.
-- Read `AGENTS.md`, `docs/ENGINEERING.md`, and `docs/STAGES.md` before broad work.
-- Define the expected correct output before interpreting a result.
-- Split large work into independently verifiable stages.
-- End each stage with build/lint evidence and a handoff in `docs/STAGES.md`.
-- If an agent says “done,” require the command, exit status, and affected API/DB field.
-- Fix root causes; do not hide design errors behind local patches.
+## System (memory outside the chat)
+
+- Durable truth: `AGENTS.md`, `docs/ENGINEERING.md`, `docs/STAGES.md`, `docs/EAT-FISH-SPIT-BONES.md`, `.kiro/context.md`
+- Keep a stage checklist: task → expected output → command → evidence → status
+- End meaningful work with a Fish-only STAGES handoff (what ran, what failed, next probe)
+- After long threads/compaction: re-read STAGES + product law before coding more
+
+## Expertise (know “right” first)
+
+- Write expected status/body/Turso/R2 **before** interpreting results
+- Presence Audit right = owned IG media + free diagnosis + gated fix, no fake uplift
+- Voice Notes right = record **and** import persist to R2 + Turso
+- Direction right = four answers → five structured ideas persisted
+- Prefer extending existing OAuth/credit/R2 patterns over inventing parallel auth
+- Local hacks that paper over design errors = Bones — fix root or mark debt
+
+## Discipline
+
+- Read critical path: route → service → Turso/R2 → credits
+- Re-hit the real endpoint after “fixed”
+- “Done?” → which command, which status, which DB/R2 field? No answer → not done
+- Do not rubber-stamp STAGES PASS from agent narrative
+
+## Anti-patterns
+
+- Accepting Index Scan / “optimized” / “shipped” without a trace
+- One mega-prompt instead of phased STAGES
+- Editing working publish/OAuth “while here” without a reproduced bug
+- Updating STAGES with unverified PASS
